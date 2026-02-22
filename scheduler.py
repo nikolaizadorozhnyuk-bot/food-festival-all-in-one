@@ -5,7 +5,7 @@ import io
 from datetime import datetime, timedelta
 
 # ==========================================
-# 🔑 ПОСИЛАННЯ НА ТАБЛИЦІ
+# 🔑 ПОСИЛАННЯ НА ТАБЛИЦІ (CSV)
 # ==========================================
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=157728024&single=true&output=csv"
 CLIENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=841758260&single=true&output=csv"
@@ -13,98 +13,79 @@ CLIENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ
 # ==========================================
 # 📢 НАЛАШТУВАННЯ TELEGRAM
 # ==========================================
-TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc" # Токен бота
+# ВСТАВ ПОВНИЙ ТОКЕН НОВОГО БОТА (8275141603:...)
+TELEGRAM_TOKEN = "8275141603:ВСТАВ_СЮДИ_СЕКРЕТНУ_ЧАСТИНУ_ТОКЕНА"
 
-GROUP_ID = "-1005236190167" # Група для замовлень
-DIRECTOR_ID = "636970008"   # Директор Едуард
-DEV_ID = "6856949294"       # Микола (Розробник)
+GROUP_ID = "-1005236190167" 
+DIRECTOR_ID = "636970008"   
+OWNER_ID = "6856949294"      
 
 def send_msg(chat_ids, text):
-    """Відправляє повідомлення одному або кільком користувачам/групам"""
+    """Відправка повідомлень (одному або списку ID)"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    if isinstance(chat_ids, str): 
+    if isinstance(chat_ids, (str, int)): 
         chat_ids = [chat_ids]
-        
     for chat_id in chat_ids:
         try:
-            requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-        except Exception:
-            pass
+            requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=10)
+        except: pass
 
-def run_report(report_type):
+def run_report(report_type="weekly"):
     try:
+        # Завантаження даних
         ord_res = requests.get(ORDERS_URL).content
         cli_res = requests.get(CLIENTS_URL).content
         df_orders = pd.read_csv(io.StringIO(ord_res.decode('utf-8')))
         df_clients = pd.read_csv(io.StringIO(cli_res.decode('utf-8')))
-    except Exception as e: 
-        send_msg(DEV_ID, f"⚠️ Помилка завантаження бази для звіту: {e}")
+    except Exception as e:
+        send_msg(OWNER_ID, f"⚠️ Помилка завантаження даних: {e}")
         return
 
-    # Об'єднуємо дані
-    df = pd.merge(df_orders, df_clients[['Телефон', 'Менеджер']], on='Телефон', how='left')
-    
-    if 'Менеджер_x' in df.columns and 'Менеджер_y' in df.columns:
-        df['Менеджер'] = df['Менеджер_x'].combine_first(df['Менеджер_y'])
+    # Обробка дат та сум
+    df_orders['Дата_dt'] = pd.to_datetime(df_orders['Дата'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
+    df_orders['Сума'] = pd.to_numeric(df_orders['Сума'], errors='coerce').fillna(0)
 
-    df['Дата_dt'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
-    df['Сума'] = pd.to_numeric(df['Сума'], errors='coerce').fillna(0)
-
+    # Фільтрація за тиждень (або день)
     now = datetime.now()
-    if report_type == "weekly":
-        start_date = now - timedelta(days=7)
-        title = "📊 ТИЖНЕВИЙ ЗВІТ COMPANIY"
-    else:
-        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        title = "📅 ЩОДЕННИЙ ЗВІТ COMPANY"
+    start_date = now - timedelta(days=7) if report_type == "weekly" else now.replace(hour=0, minute=0, second=0)
+    df_p = df_orders[df_orders['Дата_dt'] >= start_date].copy()
     
-    df_p = df[df['Дата_dt'] >= start_date].copy()
     if df_p.empty:
         return
 
-    # 1. ЗАГАЛЬНА ІНФОРМАЦІЯ (В загальну групу + Керівництву)
-    if report_type == "weekly":
-        total = df_p['Сума'].sum()
-        msg = f"{title}\n"
-        msg += f"💰 Загальний оборот: <b>{total:,.0f} ₴</b>\n\n"
-        msg += "👥 <b>Оборот по менеджерах:</b>\n"
-        m_stats = df_p.groupby('Менеджер')['Сума'].sum()
-        for m, s in m_stats.items():
-            if pd.notna(m) and str(m).strip() != "":
-                msg += f"👤 {m}: {s:,.0f} ₴\n"
-                
-        # Відправляємо в загальну групу, директору і тобі
-        send_msg([GROUP_ID, DIRECTOR_ID, DEV_ID], msg)
+    # 1. ЗАГАЛЬНИЙ ЗВІТ (У групу та Керівництву)
+    total_revenue = df_p['Сума'].sum()
+    summary_msg = f"📊 <b>{report_type.upper()} ЗВІТ FOOD FESTIVAL</b>\n"
+    summary_msg += f"💰 Загальний оборот: <b>{total_revenue:,.0f} ₴</b>\n"
+    summary_msg += f"📦 К-сть замовлень: {len(df_p)}\n\n"
+    
+    # Групування по менеджерах для загальної статистики
+    # Використовуємо стовпчик 'Менеджер' з таблиці замовлень (стовпчик J)
+    m_stats = df_p.groupby('Менеджер')['Сума'].sum().sort_values(ascending=False)
+    for m, s in m_stats.items():
+        if pd.notna(m) and str(m).strip() != "":
+            summary_msg += f"👤 {m}: {s:,.0f} ₴\n"
 
-    # 2. ПЕРСОНАЛЬНІ ЗВІТИ ДЛЯ МЕНЕДЖЕРІВ (Тільки в особисті повідомлення!)
-    for manager in df_p['Менеджер'].unique():
-        if pd.isna(manager) or str(manager).strip() == "": continue
+    send_msg([GROUP_ID, DIRECTOR_ID, OWNER_ID], summary_msg)
+
+    # 2. ПЕРСОНАЛЬНІ ЗВІТИ (В особисті повідомлення менеджерам)
+    for manager_name in df_p['Менеджер'].unique():
+        if pd.isna(manager_name) or str(manager_name).strip() == "": continue
         
-        m_df = df_p[df_p['Менеджер'] == manager]
+        m_df = df_p[df_p['Менеджер'] == manager_name]
         m_sum = m_df['Сума'].sum()
         
-        m_msg = f"{title}\n👨‍💼 <b>{manager}</b>, твій персональний звіт:\n"
-        m_msg += f"💰 Твої продажі: <b>{m_sum:,.0f} ₴</b>\n"
-        m_msg += f"📦 К-сть замовлень: {len(m_df)}\n"
+        personal_msg = f"📈 <b>Твій особистий звіт: {manager_name}</b>\n"
+        personal_msg += f"💰 Продажі: <b>{m_sum:,.0f} ₴</b>\n"
+        personal_msg += f"🛒 Замовлень: {len(m_df)}\n"
         
-        if not m_df.empty:
-            top_c = m_df.groupby('Клієнт')['Сума'].sum().idxmax()
-            m_msg += f"⭐ Твій топ-клієнт: {top_c}\n"
-            
-        # Шукаємо Telegram ID менеджера в таблиці Клієнти (стовпчик "Назва" має збігатися з іменем)
-        manager_row = df_clients[df_clients['Назва'].astype(str).str.strip() == str(manager).strip()]
-        
-        if not manager_row.empty:
-            manager_tg_id = str(manager_row.iloc[0].get('Telegram ID', '')).strip()
-            # Перевіряємо, чи вписаний ID і чи це цифри
-            if manager_tg_id and manager_tg_id.lower() != 'nan' and manager_tg_id.replace('-', '').isdigit():
-                send_msg(manager_tg_id, m_msg)
-            else:
-                # Якщо ID немає, система тихенько напише тобі в особисті, щоб ти виправив таблицю
-                send_msg(DEV_ID, f"⚠️ Не можу відправити звіт. У менеджера '{manager}' не вказано Telegram ID у таблиці.")
-        else:
-            send_msg(DEV_ID, f"⚠️ Не знайшов менеджера '{manager}' у стовпчику 'Назва'. Звіт не відправлено.")
+        # Пошук Telegram ID менеджера в таблиці Клієнти
+        m_row = df_clients[df_clients['Назва'].astype(str).str.strip() == str(manager_name).strip()]
+        if not m_row.empty:
+            tg_id = str(m_row.iloc[0].get('Telegram ID', '')).strip()
+            if tg_id and tg_id.replace('-', '').isdigit():
+                send_msg(tg_id, personal_msg)
 
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else "daily"
+    mode = sys.argv[1] if len(sys.argv) > 1 else "weekly"
     run_report(mode)
