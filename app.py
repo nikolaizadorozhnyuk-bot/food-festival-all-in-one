@@ -25,9 +25,9 @@ ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ3
 # ==========================================
 TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc"
 
-GROUP_ID = "-1005236190167"   # Загальна група (сюди падають замовлення)
-DIRECTOR_ID = "636970008"  # Директор
-DEV_ID = "6856949294"      # Микола (Розробник / Головний менеджер)
+GROUP_ID = "-1005236190167" # Виправлений ID супергрупи!
+DIRECTOR_ID = "636970008"   # Директор
+DEV_ID = "6856949294"       # Микола (Розробник)
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -38,7 +38,7 @@ def load_data(url):
     except: return None
 
 def send_to_telegram(text, target="group"):
-    """Розумна маршрутизація повідомлень (з перевіркою помилок)"""
+    """Розумна маршрутизація повідомлень"""
     if target == "group":
         chat_ids = [GROUP_ID]
     elif target == "management":
@@ -52,12 +52,10 @@ def send_to_telegram(text, target="group"):
     
     for chat_id in chat_ids:
         try:
-            response = requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-            # Якщо Telegram відхилив повідомлення, показуємо чому:
-            if response.status_code != 200:
-                st.error(f"⚠️ Помилка Telegram (ID {chat_id}): {response.text}")
-        except Exception as e:
-            st.error(f"⚠️ Помилка сервера: {e}")
+            requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+        except Exception:
+            pass
+
 def send_update(payload):
     try: return requests.post(SCRIPT_URL, json=payload, timeout=15).text
     except: return "Error"
@@ -112,11 +110,9 @@ def main():
     role = u.get('Роль', 'Client')
     is_admin = role in ['Owner', 'Admin', 'Manager']
     
-    # Бокова панель (Sidebar)
     st.sidebar.image(LOGO_URL, width=150)
     st.sidebar.success(f"👤 {u.get('Назва')} | {role}")
     
-    # МЕНЮ
     menu = ["🍎 Каталог", "🛒 Кошик", "📜 Історія замовлень", "📰 Новини", "📞 Дзвінок", "🚀 Власний додаток?"]
     if is_admin:
         menu.insert(3, "📊 Адмін-панель")
@@ -128,13 +124,11 @@ def main():
         st.session_state.logged_in = False
         st.rerun()
 
-    # ВАША ВІЗИТКА В БОКОВОМУ МЕНЮ
     st.sidebar.divider()
     st.sidebar.caption("Розробка систем автоматизації")
     st.sidebar.write("👤 **Микола Задорожнюк**")
     st.sidebar.write("📞 +380 67 595 32 20")
 
-    # РОУТИНГ СТОРІНОК
     if choice == "🍎 Каталог": show_catalog(u)
     elif choice == "🛒 Кошик": show_cart(u)
     elif choice == "📊 Адмін-панель": show_admin_panel()
@@ -144,7 +138,6 @@ def main():
     elif choice == "🔔 Нагадування": show_reminders(u)
     elif choice == "🚀 Власний додаток?": show_developer_promo()
 
-    # ВСТАВКА ФУТЕРА (В КІНЦІ ФУНКЦІЇ MAIN)
     hide_st_style = """
         <style>
         #MainMenu {visibility: hidden;}
@@ -231,9 +224,8 @@ def show_catalog(u):
         d_val = str(u.get('Знижка', '0')).replace('%','')
         disc = float(d_val)/100 if d_val.replace('.','').isdigit() else 0
         if st.button("📦 Завантажити прайс Excel з фото"):
-            with st.spinner("⏳ Створюємо файл..."):
+            with st.spinner("⏳ Створюємо файл... Це може зайняти до 20 секунд (завантажуються фото)."):
                 excel = export_to_excel_full(df, disc, p_col, u['Назва'])
-                # Відправляємо сповіщення про прайс особисто тобі, щоб не засмічувати групу
                 send_to_telegram(f"📥 Прайс завантажено: {u['Назва']}", target=DEV_ID)
                 st.download_button("📥 Завантажити файл", excel, "Price_FF.xlsx", use_container_width=True)
         search = st.text_input("🔍 Пошук товара:")
@@ -289,7 +281,6 @@ def show_cart(u):
                    f"🛒 {items_txt}\n"
                    f"💬 {comm}")
             
-            # Замовлення йдуть у загальну групу (target="group")
             send_to_telegram(msg, target="group")
             
             send_update({
@@ -328,7 +319,6 @@ def show_news():
 def show_callback(u):
     st.title("📞 Зворотній зв'язок")
     if st.button("🆘 ПЕРЕТЕЛЕФОНУЙТЕ МЕНІ", use_container_width=True):
-        # Відправляємо дзвінок ТІЛЬКИ ТОБІ (target=DEV_ID)
         send_to_telegram(f"☎️ <b>ЗАПИТ НА ДЗВІНОК!</b>\n👤 {u['Назва']}\n📞 {u['Телефон']}", target=DEV_ID)
         st.success("✅ Запит надіслано! Менеджер скоро зателефонує.")
 
@@ -338,30 +328,74 @@ def show_reminders(u):
         send_to_telegram("🔔 <b>Food Festival:</b> Не забудьте зробити замовлення на завтра!", target="group")
         st.success("✅ Надіслано у загальну групу!")
 
-# --- ЕКСПОРТ EXCEL ---
+# --- ПРЕМІУМ ЕКСПОРТ EXCEL (З ФОТО ТА ДИЗАЙНОМ) ---
 def export_to_excel_full(df, user_discount, p_col, user_name):
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
     worksheet = workbook.add_worksheet('Каталог')
+    
+    # Стилі
     header_style = workbook.add_format({'bold': True, 'font_size': 14, 'font_color': '#D4AC0D'})
-    table_header = workbook.add_format({'bold': True, 'bg_color': '#FFD966', 'border': 1, 'align': 'center'})
-    money = workbook.add_format({'num_format': '#,##0.00 ₴', 'border': 1, 'align': 'vcenter'})
-    border = workbook.add_format({'border': 1, 'align': 'vcenter', 'text_wrap': True})
+    table_header = workbook.add_format({'bold': True, 'bg_color': '#FFD966', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+    money = workbook.add_format({'num_format': '#,##0.00 ₴', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+    border_center = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    border_left = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
+    
+    # Ширина колонок
+    worksheet.set_column('A:A', 14)  
+    worksheet.set_column('B:B', 15)  
+    worksheet.set_column('C:C', 45)  
+    worksheet.set_column('D:D', 12)  
+    worksheet.set_column('E:E', 10)  
+    worksheet.set_column('F:G', 15)  
+
+    # Лого та шапка
     try:
         response = requests.get(LOGO_URL, timeout=5)
         worksheet.insert_image('A1', LOGO_URL, {'image_data': io.BytesIO(response.content), 'x_scale': 0.4, 'y_scale': 0.4})
     except: pass
+    
     worksheet.write('B1', COMPANY_NAME, header_style)
     worksheet.write('B2', f"Клієнт: {user_name} | Дата: {datetime.now().strftime('%d.%m.%Y')}")
+    
     headers = ['Фото', 'Категорія', 'Товар', 'Артикул', 'Залишок', 'Ціна', 'Ваша ціна']
-    for col_num, h in enumerate(headers): worksheet.write(6, col_num, h, table_header)
+    for col_num, h in enumerate(headers): 
+        worksheet.write(6, col_num, h, table_header)
+        
+    # Заповнення
     for row_num, (_, row) in enumerate(df.iterrows(), start=7):
-        worksheet.set_row(row_num, 65)
+        worksheet.set_row(row_num, 60)
+        
+        # Фото
+        img_url = str(row.get('Фото', ''))
+        if img_url.startswith('http'):
+            try:
+                img_resp = requests.get(img_url, timeout=1.5)
+                if img_resp.status_code == 200:
+                    img_data = io.BytesIO(img_resp.content)
+                    worksheet.insert_image(row_num, 0, img_url, {'image_data': img_data, 'x_scale': 0.15, 'y_scale': 0.15, 'object_position': 1})
+                else:
+                    worksheet.write(row_num, 0, 'Немає фото', border_center)
+            except:
+                worksheet.write(row_num, 0, 'Помилка', border_center)
+        else:
+            worksheet.write(row_num, 0, '-', border_center)
+
+        # Текст
+        worksheet.write(row_num, 1, str(row.get('Категорія', '')), border_center)
+        worksheet.write(row_num, 2, str(row.get('Товар', '')), border_left)
+        worksheet.write(row_num, 3, str(row.get('Артикул', '')), border_center)
+        worksheet.write(row_num, 4, str(row.get('Залишок', '')), border_center)
+        
+        # Ціна
         try:
             p = float(str(row.get(p_col, '0')).replace(',', '.'))
-            worksheet.write(row_num, 5, p, money); worksheet.write(row_num, 6, p * (1 - user_discount), money)
-        except: pass
-        worksheet.write(row_num, 2, row.get('Товар', ''), border)
+            worksheet.write(row_num, 5, p, money)
+            worksheet.write(row_num, 6, p * (1 - user_discount), money)
+        except: 
+            worksheet.write(row_num, 5, 0, money)
+            worksheet.write(row_num, 6, 0, money)
+            
     workbook.close()
     return output.getvalue()
 
