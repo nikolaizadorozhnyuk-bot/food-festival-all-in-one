@@ -44,7 +44,44 @@ def send_update(payload):
 if 'cart' not in st.session_state: st.session_state.cart = {}
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 
-# --- ГОЛОВНИЙ ЕКРАН ---
+
+# --- РОЗДІЛ: ПРОМО РОЗРОБНИКА ---
+def show_developer_promo():
+    st.title("🚀 Бажаєте такий додаток для свого бізнесу?")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("""
+        ### Перетворіть ваш бізнес на цифрову систему!
+        Я розробляю індивідуальні рішення, які допомагають автоматизувати продажі та звітність:
+        
+        * **✅ Мобільний каталог та кошик** — ваші клієнти замовляють у 3 кліки.
+        * **✅ База на Google Таблицях** — зручне та безкоштовне керування без складних баз даних.
+        * **✅ Розумні Telegram-боти** — миттєві сповіщення про замовлення.
+        * **✅ Адмін-панелі** — бачте прибуток, топ-товари та активність.
+        * **✅ Автоматизація рутини** — система сама надсилає звіти менеджерам.
+        """)
+    
+    with col2:
+        st.image("https://cdn-icons-png.flaticon.com/512/3142/3142121.png", use_container_width=True)
+
+    st.divider()
+    st.subheader("📊 Кейс Food Festival")
+    st.write("На базі цього додатка реалізовано:")
+    st.write("• Автоматичний поділ замовлень по менеджерах.")
+    st.write("• Розумний контроль часу доставки (до/після 11:00).")
+    st.write("• Щоденна та щотижнева звітність для всієї команди.")
+
+    st.divider()
+    st.subheader("📩 Зв'язатися з розробником")
+    
+    c1, c2 = st.columns(2)
+    with c1: st.link_button("✈️ Написати в Telegram", "https://t.me/FoodFestival_Odesa", use_container_width=True)
+    with c2: st.link_button("📞 Зателефонувати", "tel:+380675953220", use_container_width=True)
+    
+    st.info("💡 Розробка індивідуального рішення займає від 3-х днів. Зробіть свій бізнес ефективнішим вже сьогодні!")
+
+# --- ГОЛОВНИЙ ЕКРАН ТА МАРШРУТИЗАЦІЯ ---
 def main():
     if not st.session_state.logged_in:
         show_login()
@@ -54,22 +91,29 @@ def main():
     role = u.get('Роль', 'Client')
     is_admin = role in ['Owner', 'Admin', 'Manager']
     
-    st.image(LOGO_URL, width=150)
-    st.success(f"👤 {u.get('Назва')} | {role}")
+    # Бокова панель (Sidebar)
+    st.sidebar.image(LOGO_URL, width=150)
+    st.sidebar.success(f"👤 {u.get('Назва')} | {role}")
     
-    menu = ["🍎 Каталог", "🛒 Кошик", "📜 Історія замовлень", "📰 Новини", "📞 Дзвінок"]
+    # МЕНЮ
+    menu = ["🍎 Каталог", "🛒 Кошик", "📜 Історія замовлень", "📰 Новини", "📞 Дзвінок", "🚀 Власний додаток?"]
     if is_admin:
-        menu.insert(3, "📊 Адмін-панель") # Додаємо аналітику для адмінів
+        menu.insert(3, "📊 Адмін-панель")
         menu.append("🔔 Нагадування")
     
-    choice = st.selectbox("📍 Навігація:", menu)
+    choice = st.sidebar.selectbox("📍 Навігація:", menu)
     
-    if st.button("🚪 Вийти", use_container_width=True):
+    if st.sidebar.button("🚪 Вийти", use_container_width=True):
         st.session_state.logged_in = False
         st.rerun()
 
-    st.divider()
+    # ВАША ВІЗИТКА В БОКОВОМУ МЕНЮ
+    st.sidebar.divider()
+    st.sidebar.caption("Розробка систем автоматизації")
+    st.sidebar.write("👤 **Микола Задорожнюк**")
+    st.sidebar.write("📞 +380 67 595 32 20")
 
+    # РОУТИНГ СТОРІНОК
     if choice == "🍎 Каталог": show_catalog(u)
     elif choice == "🛒 Кошик": show_cart(u)
     elif choice == "📊 Адмін-панель": show_admin_panel()
@@ -77,6 +121,29 @@ def main():
     elif choice == "📰 Новини": show_news()
     elif choice == "📞 Дзвінок": show_callback(u)
     elif choice == "🔔 Нагадування": show_reminders(u)
+    elif choice == "🚀 Власний додаток?": show_developer_promo()
+
+    # ==========================================
+    # ВСТАВКА ФУТЕРА (В КІНЦІ ФУНКЦІЇ MAIN)
+    # ==========================================
+    hide_st_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        </style>
+    """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+
+    st.divider() 
+    footer_html = """
+        <div style='text-align: center; color: #888; font-size: 13px; padding-bottom: 20px;'>
+            Розроблено <b>Миколою Задорожнюком</b> | 🚀 Automation & ERP Solutions © 2026<br>
+            Бажаєте автоматизувати свій бізнес? <a href='https://t.me/FoodFestival_Odesa' target='_blank' style='color: #4CAF50; text-decoration: none; font-weight: bold;'>Замовити розробку</a>
+        </div>
+    """
+    st.markdown(footer_html, unsafe_allow_html=True)
+
 
 # --- РОЗДІЛ: АДМІН-ПАНЕЛЬ (АНАЛІТИКА) ---
 def show_admin_panel():
@@ -84,11 +151,9 @@ def show_admin_panel():
     df = load_data(ORDERS_URL)
     
     if df is not None and not df.empty:
-        # Підготовка даних
         df['Сума'] = pd.to_numeric(df['Сума'], errors='coerce').fillna(0)
         df['Дата_dt'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
         
-        # 1. Метрики зверху
         c1, c2, c3 = st.columns(3)
         total_sales = df['Сума'].sum()
         this_month = df[df['Дата_dt'] >= datetime.now().replace(day=1)]['Сума'].sum()
@@ -99,36 +164,31 @@ def show_admin_panel():
         c3.metric("Унікальних клієнтів", active_clients)
         
         st.divider()
-        
-        # 2. Графік продажів
         st.subheader("📈 Динаміка замовлень")
         chart_data = df.groupby(df['Дата_dt'].dt.date)['Сума'].sum()
         st.area_chart(chart_data)
         
-        # 3. Топ товарів (парсимо рядок товарів)
         st.subheader("🏆 Топ затребуваних товарів")
         all_items = []
         for items_str in df['Товари']:
-            # Розбиваємо рядок типу "Товар (2 шт); Товар2 (1 шт);"
-            parts = [p.split(' (')[0].strip() for p in items_str.split(';') if '(' in p]
+            parts = [p.split(' (')[0].strip() for p in str(items_str).split(';') if '(' in p]
             all_items.extend(parts)
         
         if all_items:
             top_df = pd.Series(all_items).value_counts().head(10)
             st.bar_chart(top_df)
         
-        # 4. Активність клієнтів
         st.subheader("👥 Найактивніші клієнти")
         client_stats = df.groupby('Клієнт').agg({
             'Сума': 'sum',
             'Дата': 'count'
         }).rename(columns={'Дата': 'К-сть замовлень'}).sort_values(by='Сума', ascending=False)
         st.dataframe(client_stats, use_container_width=True)
-        
     else:
         st.warning("Дані для аналітики поки відсутні.")
 
-# --- РЕШТА ФУНКЦІЙ (ВХІД, КАТАЛОГ, КОШИК ТОЩО - БЕЗ ЗМІН) ---
+
+# --- РЕШТА ФУНКЦІЙ (ВХІД, КАТАЛОГ, КОШИК ТОЩО) ---
 def show_login():
     st.image(LOGO_URL, width=200)
     phone = st.text_input("Введіть номер телефону:")
@@ -147,9 +207,12 @@ def show_login():
             else: st.error("❌ Номер не знайдено.")
 
 def show_catalog(u):
+    st.title("🍎 Каталог")
     df = load_data(SHEET_URL)
     if df is not None:
-        p_col = u.get('Колонка прайс', 'Ціна'); d_val = str(u.get('Знижка', '0')).replace('%',''); disc = float(d_val)/100 if d_val.replace('.','').isdigit() else 0
+        p_col = u.get('Колонка прайс', 'Ціна')
+        d_val = str(u.get('Знижка', '0')).replace('%','')
+        disc = float(d_val)/100 if d_val.replace('.','').isdigit() else 0
         if st.button("📦 Завантажити прайс Excel з фото"):
             with st.spinner("⏳ Створюємо файл..."):
                 excel = export_to_excel_full(df, disc, p_col, u['Назва'])
@@ -160,11 +223,12 @@ def show_catalog(u):
         for _, row in f_df.iterrows():
             with st.container():
                 c1, c2 = st.columns([1, 2])
-                with c1: st.image(row['Фото'] if row['Фото'] else "https://via.placeholder.com/150", use_container_width=True)
+                with c1: st.image(row['Фото'] if pd.notna(row['Фото']) and row['Фото'] else "https://via.placeholder.com/150", use_container_width=True)
                 with c2:
                     st.subheader(row['Товар'])
                     if row.get('Опис'): st.info(row['Опис'])
-                    p_raw = float(str(row.get(p_col, '0')).replace(',', '.')); final_p = p_raw * (1 - disc)
+                    p_raw = float(str(row.get(p_col, '0')).replace(',', '.'))
+                    final_p = p_raw * (1 - disc)
                     st.write(f"💰 **Ціна: {final_p:g} ₴** | Залишок: {row.get('Залишок', '0')}")
                     qty = st.number_input(f"К-сть ({row['Артикул']})", min_value=0.0, step=1.0, key=f"q_{row['Артикул']}")
                     if qty > 0: st.session_state.cart[row['Товар']] = {'qty': qty, 'price': final_p, 'art': row['Артикул']}
@@ -175,7 +239,6 @@ def show_cart(u):
     if not st.session_state.cart: 
         st.info("Кошик порожній.")
     else:
-        # --- ПЕРЕВІРКА ЧАСУ (11:00) ---
         now = datetime.now()
         cutoff_time = now.replace(hour=11, minute=0, second=0, microsecond=0)
         is_late = now > cutoff_time
@@ -199,7 +262,6 @@ def show_cart(u):
         deliv = st.selectbox("Спосіб доставки", ["Доставка Food Festival", "Самовивіз", "Нова Пошта"])
         
         if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
-            # Додаємо статус доставки в повідомлення Telegram
             msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n"
                    f"⏰ <b>{delivery_status}</b>\n"
                    f"👤 {u['Назва']}\n"
@@ -208,10 +270,7 @@ def show_cart(u):
                    f"🚚 {deliv}: {addr}\n"
                    f"🛒 {items_txt}\n"
                    f"💬 {comm}")
-            
             send_to_telegram(msg)
-            
-            # Відправляємо в таблицю з поміткою в коментарі або статусі
             send_update({
                 "type": "NEW_ORDER", 
                 "phone": u['Телефон'], 
@@ -222,7 +281,6 @@ def show_cart(u):
                 "delivery_address": addr, 
                 "delivery_method": deliv
             })
-            
             st.balloons()
             st.success(f"✅ Замовлення надіслано! {delivery_status}")
             st.session_state.cart = {}
@@ -247,14 +305,16 @@ def show_news():
             st.subheader(r.get('Заголовок')); st.write(r.get('Текст новини')); st.divider()
 
 def show_callback(u):
+    st.title("📞 Зворотній зв'язок")
     if st.button("🆘 ПЕРЕТЕЛЕФОНУЙТЕ МЕНІ", use_container_width=True):
         send_to_telegram(f"☎️ <b>ЗАПИТ НА ДЗВІНОК!</b>\n👤 {u['Назва']}\n📞 {u['Телефон']}"); st.success("✅ Запит надіслано!")
 
 def show_reminders(u):
-    if st.button("📢 Нагадування в Telegram"):
-        send_to_telegram("🔔 <b>Food Festival:</b> Не забудьте зробити замовлення!"); st.success("Надіслано!")
+    st.title("🔔 Нагадування")
+    if st.button("📢 Відправити всім нагадування в Telegram"):
+        send_to_telegram("🔔 <b>Food Festival:</b> Не забудьте зробити замовлення на завтра!"); st.success("✅ Надіслано!")
 
-# --- ЕКСПОРТ EXCEL (ВИНЕСЕНО ДЛЯ ЧИТАНОСТІ) ---
+# --- ЕКСПОРТ EXCEL ---
 def export_to_excel_full(df, user_discount, p_col, user_name):
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
