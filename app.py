@@ -27,7 +27,7 @@ TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc"
 
 GROUP_ID = "-1005236190167" # Виправлений ID супергрупи!
 DIRECTOR_ID = "636970008"   # Директор
-DEV_ID = "6856949294"       # Микола (Розробник)
+DEV_ID = "8297615872"       # Микола (Розробник)
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
