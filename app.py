@@ -38,7 +38,7 @@ def load_data(url):
     except: return None
 
 def send_to_telegram(text, target="group"):
-    """Розумна маршрутизація повідомлень"""
+    """Розумна маршрутизація повідомлень (з перевіркою помилок)"""
     if target == "group":
         chat_ids = [GROUP_ID]
     elif target == "management":
@@ -46,16 +46,18 @@ def send_to_telegram(text, target="group"):
     elif target == "all":
         chat_ids = [GROUP_ID, DIRECTOR_ID, DEV_ID]
     else:
-        chat_ids = [target] # Якщо передали конкретний ID (наприклад, DEV_ID)
+        chat_ids = [target]
         
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     
     for chat_id in chat_ids:
         try:
-            requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+            response = requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+            # Якщо Telegram відхилив повідомлення, показуємо чому:
+            if response.status_code != 200:
+                st.error(f"⚠️ Помилка Telegram (ID {chat_id}): {response.text}")
         except Exception as e:
-            pass
-
+            st.error(f"⚠️ Помилка сервера: {e}")
 def send_update(payload):
     try: return requests.post(SCRIPT_URL, json=payload, timeout=15).text
     except: return "Error"
