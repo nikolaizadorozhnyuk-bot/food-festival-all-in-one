@@ -20,8 +20,14 @@ CLIENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ
 NEWS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=374278986&single=true&output=csv"
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=157728024&single=true&output=csv"
 
+# ==========================================
+# 📢 НАЛАШТУВАННЯ TELEGRAM-МАРШРУТИЗАЦІЇ
+# ==========================================
 TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc"
-CHAT_ID = "-5236190167"
+
+GROUP_ID = "-5236190167"   # Загальна група (сюди падають замовлення)
+DIRECTOR_ID = "636970008"  # Директор
+DEV_ID = "6856949294"      # Микола (Розробник / Головний менеджер)
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -31,10 +37,24 @@ def load_data(url):
     try: return pd.read_csv(url, dtype=str).fillna('')
     except: return None
 
-def send_to_telegram(text):
+def send_to_telegram(text, target="group"):
+    """Розумна маршрутизація повідомлень"""
+    if target == "group":
+        chat_ids = [GROUP_ID]
+    elif target == "management":
+        chat_ids = [DIRECTOR_ID, DEV_ID]
+    elif target == "all":
+        chat_ids = [GROUP_ID, DIRECTOR_ID, DEV_ID]
+    else:
+        chat_ids = [target] # Якщо передали конкретний ID (наприклад, DEV_ID)
+        
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    try: requests.post(url, data={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"})
-    except: pass
+    
+    for chat_id in chat_ids:
+        try:
+            requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+        except Exception as e:
+            pass
 
 def send_update(payload):
     try: return requests.post(SCRIPT_URL, json=payload, timeout=15).text
@@ -43,7 +63,6 @@ def send_update(payload):
 # --- СЕСІЯ ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
-
 
 # --- РОЗДІЛ: ПРОМО РОЗРОБНИКА ---
 def show_developer_promo():
@@ -123,9 +142,7 @@ def main():
     elif choice == "🔔 Нагадування": show_reminders(u)
     elif choice == "🚀 Власний додаток?": show_developer_promo()
 
-    # ==========================================
     # ВСТАВКА ФУТЕРА (В КІНЦІ ФУНКЦІЇ MAIN)
-    # ==========================================
     hide_st_style = """
         <style>
         #MainMenu {visibility: hidden;}
@@ -143,7 +160,6 @@ def main():
         </div>
     """
     st.markdown(footer_html, unsafe_allow_html=True)
-
 
 # --- РОЗДІЛ: АДМІН-ПАНЕЛЬ (АНАЛІТИКА) ---
 def show_admin_panel():
@@ -187,8 +203,7 @@ def show_admin_panel():
     else:
         st.warning("Дані для аналітики поки відсутні.")
 
-
-# --- РЕШТА ФУНКЦІЙ (ВХІД, КАТАЛОГ, КОШИК ТОЩО) ---
+# --- РЕШТА ФУНКЦІЙ ---
 def show_login():
     st.image(LOGO_URL, width=200)
     phone = st.text_input("Введіть номер телефону:")
@@ -216,7 +231,8 @@ def show_catalog(u):
         if st.button("📦 Завантажити прайс Excel з фото"):
             with st.spinner("⏳ Створюємо файл..."):
                 excel = export_to_excel_full(df, disc, p_col, u['Назва'])
-                send_to_telegram(f"📥 Прайс завантажено: {u['Назва']}")
+                # Відправляємо сповіщення про прайс особисто тобі, щоб не засмічувати групу
+                send_to_telegram(f"📥 Прайс завантажено: {u['Назва']}", target=DEV_ID)
                 st.download_button("📥 Завантажити файл", excel, "Price_FF.xlsx", use_container_width=True)
         search = st.text_input("🔍 Пошук товара:")
         f_df = df[df['Товар'].str.contains(search, case=False)] if search else df
@@ -270,7 +286,10 @@ def show_cart(u):
                    f"🚚 {deliv}: {addr}\n"
                    f"🛒 {items_txt}\n"
                    f"💬 {comm}")
-            send_to_telegram(msg)
+            
+            # Замовлення йдуть у загальну групу (target="group")
+            send_to_telegram(msg, target="group")
+            
             send_update({
                 "type": "NEW_ORDER", 
                 "phone": u['Телефон'], 
@@ -307,12 +326,15 @@ def show_news():
 def show_callback(u):
     st.title("📞 Зворотній зв'язок")
     if st.button("🆘 ПЕРЕТЕЛЕФОНУЙТЕ МЕНІ", use_container_width=True):
-        send_to_telegram(f"☎️ <b>ЗАПИТ НА ДЗВІНОК!</b>\n👤 {u['Назва']}\n📞 {u['Телефон']}"); st.success("✅ Запит надіслано!")
+        # Відправляємо дзвінок ТІЛЬКИ ТОБІ (target=DEV_ID)
+        send_to_telegram(f"☎️ <b>ЗАПИТ НА ДЗВІНОК!</b>\n👤 {u['Назва']}\n📞 {u['Телефон']}", target=DEV_ID)
+        st.success("✅ Запит надіслано! Менеджер скоро зателефонує.")
 
 def show_reminders(u):
     st.title("🔔 Нагадування")
     if st.button("📢 Відправити всім нагадування в Telegram"):
-        send_to_telegram("🔔 <b>Food Festival:</b> Не забудьте зробити замовлення на завтра!"); st.success("✅ Надіслано!")
+        send_to_telegram("🔔 <b>Food Festival:</b> Не забудьте зробити замовлення на завтра!", target="group")
+        st.success("✅ Надіслано у загальну групу!")
 
 # --- ЕКСПОРТ EXCEL ---
 def export_to_excel_full(df, user_discount, p_col, user_name):
