@@ -25,7 +25,7 @@ ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ3
 # ==========================================
 TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc"
 
-GROUP_ID = "-5236190167"   # Загальна група (сюди падають замовлення)
+GROUP_ID = "-1005236190167"   # Загальна група (сюди падають замовлення)
 DIRECTOR_ID = "636970008"  # Директор
 DEV_ID = "6856949294"      # Микола (Розробник / Головний менеджер)
 
