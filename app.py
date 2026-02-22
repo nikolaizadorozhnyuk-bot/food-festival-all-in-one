@@ -14,7 +14,7 @@ COMPANY_NAME = "Food Festival"
 LOGO_URL = "https://foodfestival.com.ua/image/catalog/logos/logo_foodfestival_upd-2.png"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyaFzeDCKyGghOoel888Xx_QkEaYTytH2te1BsJlSlUAqKYg1LyxF0_AwogvNPOU1PX/exec"
 
-# База даних CSV
+# Бази даних CSV
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=0&single=true&output=csv"
 CLIENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=841758260&single=true&output=csv"
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=157728024&single=true&output=csv"
@@ -24,8 +24,8 @@ NEWS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36H
 # 📢 TELEGRAM (8275141603)
 # ==========================================
 TELEGRAM_TOKEN = "8275141603:AAGTvEF59ZOaD0rGsXHkitiWOA6TX-wTpRU"
-GROUP_ID = "-1003641918928" 
-DEV_ID = "6856949294"       
+GROUP_ID = "-1003641918928" # НОВА СУПЕРГРУПА
+DEV_ID = "6856949294"       # Твій ID
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -36,8 +36,26 @@ def load_data(url):
     except: return None
 
 def send_update(payload):
+    """Запис замовлення в Google Таблицю"""
     try: requests.post(SCRIPT_URL, json=payload, timeout=15)
     except: pass
+
+def send_order_with_photos(text, photos):
+    """Надсилає текст замовлення та фото товарів групою"""
+    url_msg = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    url_media = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
+    
+    # 1. Текст замовлення
+    requests.post(url_msg, data={"chat_id": GROUP_ID, "text": text, "parse_mode": "HTML"})
+    
+    # 2. Фото товарів (макс 10)
+    if photos:
+        media = []
+        for img in list(dict.fromkeys(photos))[:10]: # Прибираємо дублікати та обмежуємо 10 фото
+            media.append({"type": "photo", "media": img})
+        try:
+            requests.post(url_media, json={"chat_id": GROUP_ID, "media": media}, timeout=10)
+        except: pass
 
 def send_to_telegram(text, target="group"):
     chat_id = GROUP_ID if target == "group" else target
@@ -66,9 +84,9 @@ def main():
     is_admin = role in ['Owner', 'Admin', 'Manager', 'Директор', 'Менеджер', 'Власник']
     
     st.sidebar.image(LOGO_URL, width=150)
-    st.sidebar.success(f"👤 {u.get('Назва')} | {role}")
+    st.sidebar.success(f"👤 {u.get('Назва')} | {role}") # ТУТ БУДЕ НОВЕ ІМ'Я
     
-    menu = ["🍎 Каталог", cart_label, "📜 Історія замовлень", "📰 Новини", "📞 Дзвінок", "🚀 Власний додаток?"]
+    menu = ["🍎 Каталог", cart_label, "📜 Історія замовлень", "📰 Новини", "📞 Дзвінок", "🚀 ERP Системи"]
     if is_admin:
         menu.insert(3, "📊 Адмін-панель")
         menu.append("🔔 Нагадування")
@@ -86,15 +104,24 @@ def main():
     elif choice == "📰 Новини": show_news()
     elif choice == "📞 Дзвінок": show_callback(u)
     elif choice == "🔔 Нагадування": show_reminders(u)
-    elif choice == "🚀 Власний додаток?": show_developer_promo()
+    elif choice == "🚀 ERP Системи": show_developer_promo()
 
+# --- ЛОГІКА ВХОДУ (ОНОВЛЕНО ІМ'Я ВЛАСНИКА) ---
 def show_login():
     st.image(LOGO_URL, width=200)
     phone = st.text_input("Введіть номер телефону:")
     if st.button("Увійти", use_container_width=True):
         if phone == OWNER_PHONE:
             st.session_state.logged_in = True
-            st.session_state.user_info = {'Назва': 'ВЛАСНИК', 'Роль': 'Власник', 'Телефон': phone, 'Менеджер': 'Микола'}
+            # ЗАМІНИЛИ 'ВЛАСНИК' НА 'Микола Задорожнюк'
+            st.session_state.user_info = {
+                'Назва': 'Микола Задорожнюк', 
+                'Роль': 'Власник', 
+                'Телефон': phone,
+                'Менеджер': 'Микола Задорожнюк',
+                'Знижка': '0',
+                'Колонка прайс': 'Ціна'
+            }
             st.rerun()
         df = load_data(CLIENTS_URL)
         if df is not None:
@@ -106,15 +133,15 @@ def show_login():
             else: st.error("❌ Номер не знайдено.")
 
 def show_catalog(u):
-    st.title("🍎 Каталог")
+    st.title("🍎 Каталог товарів")
     if st.session_state.cart:
         total = sum(v['qty'] * v['price'] for v in st.session_state.cart.values())
-        st.success(f"🛒 У кошику: **{total:g} ₴**")
+        st.success(f"🛒 У кошику: **{total:g} ₴**. Оформіть замовлення в меню!")
 
     df = load_data(SHEET_URL)
     if df is not None:
         p_col = u.get('Колонка прайс', 'Ціна')
-        search = st.text_input("🔍 Пошук:")
+        search = st.text_input("🔍 Швидкий пошук:")
         f_df = df[df['Товар'].str.contains(search, case=False)] if search else df
         for _, row in f_df.iterrows():
             with st.container():
@@ -122,10 +149,8 @@ def show_catalog(u):
                 with c1: st.image(row['Фото'] if pd.notna(row['Фото']) and row['Фото'] else "https://via.placeholder.com/150", use_container_width=True)
                 with c2:
                     st.subheader(row['Товар'])
-                    # --- ПОВЕРНУЛИ ОПИС ТУТ ---
                     if row.get('Опис') and str(row['Опис']).strip() != "":
                         st.info(row['Опис'])
-                    # --------------------------
                     p_raw = float(str(row.get(p_col, '0')).replace(',', '.'))
                     st.write(f"💰 **Ціна: {p_raw:g} ₴**")
                     qty = st.number_input(f"Кількість", min_value=0.0, step=1.0, key=f"q_{row['Артикул']}")
@@ -138,8 +163,7 @@ def show_cart(u):
     if not st.session_state.cart:
         st.info("Порожньо.")
     else:
-        total = 0
-        items_txt = ""
+        total = 0; items_txt = ""
         delivery_status = "ДОСТАВКА НА СЬОГОДНІ" if datetime.now().hour < 11 else "ДОСТАВКА НА ЗАВТРА"
         for name, data in list(st.session_state.cart.items()):
             line_sum = data['qty'] * data['price']
@@ -148,23 +172,33 @@ def show_cart(u):
             with c_txt: st.write(f"• **{name}** — {data['qty']} шт. ({line_sum:g} ₴)")
             with c_del:
                 if st.button("❌", key=f"del_{data['art']}"):
-                    del st.session_state.cart[name]
-                    st.rerun()
+                    del st.session_state.cart[name]; st.rerun()
             items_txt += f"{name} ({data['qty']} шт.); "
 
+        st.divider()
         st.subheader(f"Сума: {total:g} ₴")
-        addr = st.text_input("Адреса:")
+        addr = st.text_input("Адреса доставки:")
         deliv = st.selectbox("Спосіб", ["Доставка Food Festival", "Самовивіз"])
-        if st.button("🚀 ВІДПРАВИТИ", use_container_width=True):
+        if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
             manager = str(u.get('Менеджер', '')).strip()
             msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n⏰ {delivery_status}\n👤 {u['Назва']}\n📞 {u['Телефон']}\n"
                    f"👨‍💼 Менеджер: {manager}\n💰 Сума: {total:g} ₴\n🚚 {deliv}: {addr}\n🛒 {items_txt}")
-            send_to_telegram(msg, target="group")
+            
+            # Збираємо фото товарів
+            photos = []
+            df_p = load_data(SHEET_URL)
+            for item_name in st.session_state.cart.keys():
+                item_data = df_p[df_p['Товар'] == item_name]
+                if not item_data.empty:
+                    img_url = str(item_data.iloc[0].get('Фото', '')).strip()
+                    if img_url.startswith('http'): photos.append(img_url)
+
+            # Відправка в Telegram з фото
+            send_order_with_photos(msg, photos)
+            
+            # Запис у таблицю
             send_update({"type": "NEW_ORDER", "phone": u['Телефон'], "client": u['Назва'], "total": total, "items": items_txt, "delivery_address": addr, "delivery_method": deliv, "manager": manager, "comment": delivery_status})
             st.balloons(); st.session_state.cart = {}; st.rerun()
-
-# (Решта функцій: show_admin_panel, show_history, show_news, show_callback, show_reminders, show_developer_promo)
-# залишаються без змін, як у попередньому коді.
 
 def show_admin_panel():
     st.title("📊 Аналітика")
