@@ -4,13 +4,14 @@ import pandas as pd
 import io
 from datetime import datetime, timedelta
 
-# --- НАЛАШТУВАННЯ ---
-TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc"
-DIRECTOR_CHAT_ID = "-5236190167" # Ваш ID (куди прийде повний звіт)
+# ==========================================
+# 📢 НАЛАШТУВАННЯ TELEGRAM
+# ==========================================
+TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc" # Токен бота
 
-ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=157728024&single=true&output=csv"
-CLIENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=841758260&single=true&output=csv"
-
+GROUP_ID = "-1005236190167" # Група для замовлень
+DIRECTOR_ID = "636970008"   # Директор Едуард
+DEV_ID = "6856949294"       # Микола (Розробник)
 def send_msg(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
