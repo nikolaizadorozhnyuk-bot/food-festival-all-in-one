@@ -172,17 +172,60 @@ def show_catalog(u):
 
 def show_cart(u):
     st.title("🛒 Кошик")
-    if not st.session_state.cart: st.info("Кошик порожній.")
+    if not st.session_state.cart: 
+        st.info("Кошик порожній.")
     else:
+        # --- ПЕРЕВІРКА ЧАСУ (11:00) ---
+        now = datetime.now()
+        cutoff_time = now.replace(hour=11, minute=0, second=0, microsecond=0)
+        is_late = now > cutoff_time
+        
+        if is_late:
+            st.warning("⚠️ Зверніть увагу: замовлення прийняте після 11:00, тому доставка буде здійснена ЗАВТРА.")
+            delivery_status = "ДОСТАВКА НА ЗАВТРА"
+        else:
+            st.success("✅ Замовлення прийняте до 11:00. Доставка згідно з графіком на сьогодні.")
+            delivery_status = "ДОСТАВКА НА СЬОГОДНІ"
+        
         total = 0; items_txt = ""
         for n, d in st.session_state.cart.items():
-            total += d['qty'] * d['price']; st.write(f"• {n} — {d['qty']} шт."); items_txt += f"{n} ({d['qty']} шт.); "
+            total += d['qty'] * d['price']
+            st.write(f"• {n} — {d['qty']} шт. ({d['qty']*d['price']:g} ₴)")
+            items_txt += f"{n} ({d['qty']} шт.); "
+            
         st.subheader(f"Сума: {total:g} ₴")
-        addr = st.text_input("Адреса доставки:"); deliv = st.selectbox("Спосіб доставки", ["Доставка Food Festival", "Самовивіз", "Нова Пошта"])
+        addr = st.text_input("Адреса доставки:")
+        comm = st.text_area("Коментар:")
+        deliv = st.selectbox("Спосіб доставки", ["Доставка Food Festival", "Самовивіз", "Нова Пошта"])
+        
         if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
-            send_to_telegram(f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n👤 {u['Назва']}\n💰 {total:g} ₴\n🚚 {deliv}\n🏠 {addr}\n🛒 {items_txt}")
-            send_update({"type": "NEW_ORDER", "phone": u['Телефон'], "client": u['Назва'], "total": total, "items": items_txt, "delivery_address": addr, "delivery_method": deliv})
-            st.success("✅ Надіслано!"); st.session_state.cart = {}
+            # Додаємо статус доставки в повідомлення Telegram
+            msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n"
+                   f"⏰ <b>{delivery_status}</b>\n"
+                   f"👤 {u['Назва']}\n"
+                   f"📞 {u['Телефон']}\n"
+                   f"💰 Сума: {total:g} ₴\n"
+                   f"🚚 {deliv}: {addr}\n"
+                   f"🛒 {items_txt}\n"
+                   f"💬 {comm}")
+            
+            send_to_telegram(msg)
+            
+            # Відправляємо в таблицю з поміткою в коментарі або статусі
+            send_update({
+                "type": "NEW_ORDER", 
+                "phone": u['Телефон'], 
+                "client": u['Назва'], 
+                "total": total, 
+                "items": items_txt, 
+                "comment": f"[{delivery_status}] " + comm, 
+                "delivery_address": addr, 
+                "delivery_method": deliv
+            })
+            
+            st.balloons()
+            st.success(f"✅ Замовлення надіслано! {delivery_status}")
+            st.session_state.cart = {}
 
 def show_history(u):
     st.title("📜 Історія замовлень")
