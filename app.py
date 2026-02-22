@@ -366,18 +366,72 @@ def export_to_excel_full(df, user_discount, p_col, user_name):
     for row_num, (_, row) in enumerate(df.iterrows(), start=7):
         worksheet.set_row(row_num, 60)
         
-        # Фото
-        img_url = str(row.get('Фото', ''))
+   # --- ПРЕМІУМ ЕКСПОРТ EXCEL (З ФОТО ТА КОНВЕРТАЦІЄЮ WEBP) ---
+def export_to_excel_full(df, user_discount, p_col, user_name):
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet('Каталог')
+    
+    # Стилі
+    header_style = workbook.add_format({'bold': True, 'font_size': 14, 'font_color': '#D4AC0D'})
+    table_header = workbook.add_format({'bold': True, 'bg_color': '#FFD966', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+    money = workbook.add_format({'num_format': '#,##0.00 ₴', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+    border_center = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    border_left = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
+    
+    # Ширина колонок
+    worksheet.set_column('A:A', 14)  
+    worksheet.set_column('B:B', 15)  
+    worksheet.set_column('C:C', 45)  
+    worksheet.set_column('D:D', 12)  
+    worksheet.set_column('E:E', 10)  
+    worksheet.set_column('F:G', 15)  
+
+    # Лого та шапка
+    try:
+        response = requests.get(LOGO_URL, timeout=5)
+        worksheet.insert_image('A1', LOGO_URL, {'image_data': io.BytesIO(response.content), 'x_scale': 0.4, 'y_scale': 0.4})
+    except: pass
+    
+    worksheet.write('B1', COMPANY_NAME, header_style)
+    worksheet.write('B2', f"Клієнт: {user_name} | Дата: {datetime.now().strftime('%d.%m.%Y')}")
+    
+    headers = ['Фото', 'Категорія', 'Товар', 'Артикул', 'Залишок', 'Ціна', 'Ваша ціна']
+    for col_num, h in enumerate(headers): 
+        worksheet.write(6, col_num, h, table_header)
+        
+    # Заповнення
+    for row_num, (_, row) in enumerate(df.iterrows(), start=7):
+        worksheet.set_row(row_num, 60)
+        
+        # Фото (З розумною конвертацією)
+        img_url = str(row.get('Фото', '')).strip()
         if img_url.startswith('http'):
             try:
-                img_resp = requests.get(img_url, timeout=1.5)
+                # Маскуємося під звичайний браузер
+                headers_req = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                img_resp = requests.get(img_url, headers=headers_req, timeout=5)
+                
                 if img_resp.status_code == 200:
                     img_data = io.BytesIO(img_resp.content)
-                    worksheet.insert_image(row_num, 0, img_url, {'image_data': img_data, 'x_scale': 0.15, 'y_scale': 0.15, 'object_position': 1})
+                    
+                    try:
+                        # Відкриваємо картинку через Pillow
+                        img = Image.open(img_data)
+                        # Якщо формат не підходить для Excel (наприклад, WebP) - конвертуємо!
+                        if img.format not in ['JPEG', 'PNG', 'BMP']:
+                            img = img.convert('RGB')
+                            img_data = io.BytesIO()
+                            img.save(img_data, format='JPEG')
+                        
+                        img_data.seek(0)
+                        worksheet.insert_image(row_num, 0, img_url, {'image_data': img_data, 'x_scale': 0.15, 'y_scale': 0.15, 'object_position': 1})
+                    except Exception as e:
+                        worksheet.write(row_num, 0, 'Формат не підт.', border_center)
                 else:
-                    worksheet.write(row_num, 0, 'Немає фото', border_center)
+                    worksheet.write(row_num, 0, 'Немає доступу', border_center)
             except:
-                worksheet.write(row_num, 0, 'Помилка', border_center)
+                worksheet.write(row_num, 0, 'Таймаут', border_center)
         else:
             worksheet.write(row_num, 0, '-', border_center)
 
@@ -398,6 +452,3 @@ def export_to_excel_full(df, user_discount, p_col, user_name):
             
     workbook.close()
     return output.getvalue()
-
-if __name__ == "__main__":
-    main()
