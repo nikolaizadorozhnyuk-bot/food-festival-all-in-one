@@ -39,7 +39,7 @@ def load_data(url):
     except: return None
 
 def send_to_telegram(text, target="group"):
-    """Розумна маршрутизація повідомлень"""
+    """Розумна маршрутизація повідомлень (З ПЕРЕВІРКОЮ ПОМИЛОК)"""
     if target == "group":
         chat_ids = [GROUP_ID]
     elif target == "management":
@@ -53,13 +53,12 @@ def send_to_telegram(text, target="group"):
     
     for chat_id in chat_ids:
         try:
-            requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-        except Exception:
-            pass
-
-def send_update(payload):
-    try: return requests.post(SCRIPT_URL, json=payload, timeout=15).text
-    except: return "Error"
+            res = requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+            # Якщо Telegram відмовився приймати повідомлення - виводимо червону помилку на екран:
+            if res.status_code != 200:
+                st.error(f"⚠️ Помилка Telegram: {res.text}")
+        except Exception as e:
+            st.error(f"⚠️ Системна помилка: {e}")
 
 # --- СЕСІЯ ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
