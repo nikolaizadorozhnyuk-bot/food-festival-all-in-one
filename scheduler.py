@@ -1,23 +1,73 @@
+import sys
 import requests
-import os
+import pandas as pd
+import io
+from datetime import datetime, timedelta
 
-# Твої дані (вони вже в нас є)
+# --- НАЛАШТУВАННЯ ---
 TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc"
-CHAT_ID = "-5236190167"
+DIRECTOR_CHAT_ID = "-5236190167" # Ваш ID (куди прийде повний звіт)
 
-def send_reminder():
-    text = "🔔 <b>Food Festival: Автоматичне нагадування!</b>\n\nШановні клієнти, сьогодні день замовлень. Будь ласка, перевірте залишки та залиште заявку в додатку. Гарного дня! 🍏"
+ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=157728024&single=true&output=csv"
+CLIENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=841758260&single=true&output=csv"
+
+def send_msg(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
-    
+    requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+
+def run_report(report_type):
     try:
-        r = requests.post(url, data=payload)
-        if r.status_code == 200:
-            print("✅ Нагадування успішно надіслано!")
-        else:
-            print(f"❌ Помилка: {r.text}")
-    except Exception as e:
-        print(f"🆘 Виникла помилка: {e}")
+        ord_res = requests.get(ORDERS_URL).content
+        cli_res = requests.get(CLIENTS_URL).content
+        df_orders = pd.read_csv(io.StringIO(ord_res.decode('utf-8')))
+        df_clients = pd.read_csv(io.StringIO(cli_res.decode('utf-8')))
+    except: return
+
+    # Об'єднуємо дані, щоб знати Менеджера кожного замовлення
+    df = pd.merge(df_orders, df_clients[['Телефон', 'Менеджер']], on='Телефон', how='left')
+    df['Дата_dt'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
+    df['Сума'] = pd.to_numeric(df['Сума'], errors='coerce').fillna(0)
+
+    now = datetime.now()
+    if report_type == "weekly":
+        start_date = now - timedelta(days=7)
+        title = "📊 ТИЖНЕВИЙ ЗВІТ"
+    else:
+        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        title = "📅 ЩОДЕННИЙ ЗВІТ"
+    
+    df_p = df[df['Дата_dt'] >= start_date].copy()
+
+    # 1. ЗВІТ ДЛЯ ДИРЕКТОРА (тільки у п'ятницю / weekly)
+    if report_type == "weekly":
+        total = df_p['Сума'].sum()
+        msg = f"{title} (ДИРЕКТОР)\n"
+        msg += f"💰 Оборот за тиждень: <b>{total:,.0f} ₴</b>\n\n"
+        msg += "👥 <b>Результати менеджерів:</b>\n"
+        m_stats = df_p.groupby('Менеджер')['Сума'].sum()
+        for m, s in m_stats.items():
+            msg += f"👤 {m}: {s:,.0f} ₴\n"
+        send_msg(DIRECTOR_CHAT_ID, msg)
+
+    # 2. ПЕРСОНАЛЬНІ ЗВІТИ ДЛЯ МЕНЕДЖЕРІВ
+    # (Надсилаються окремими блоками в загальну групу)
+    for manager in df_p['Менеджер'].unique():
+        if pd.isna(manager) or manager == "": continue
+        
+        m_df = df_p[df_p['Менеджер'] == manager]
+        m_sum = m_df['Сума'].sum()
+        
+        m_msg = f"{title}: <b>{manager}</b>\n"
+        m_msg += f"💰 Продажі по твоїх клієнтах: <b>{m_sum:,.0f} ₴</b>\n"
+        m_msg += f"📦 К-сть замовлень: {len(m_df)}\n"
+        
+        if not m_df.empty:
+            top_c = m_df.groupby('Клієнт')['Сума'].sum().idxmax()
+            m_msg += f"⭐ Твій топ-клієнт: {top_c}\n"
+            
+        send_msg(DIRECTOR_CHAT_ID, m_msg)
 
 if __name__ == "__main__":
-    send_reminder()
+    # Читаємо аргумент: daily або weekly
+    mode = sys.argv[1] if len(sys.argv) > 1 else "daily"
+    run_report(mode)
