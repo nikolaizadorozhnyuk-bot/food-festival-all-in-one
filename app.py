@@ -21,11 +21,11 @@ ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ3
 NEWS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=374278986&single=true&output=csv"
 
 # ==========================================
-# 📢 TELEGRAM (8275141603:AAGTvEF59ZOa...)
+# 📢 TELEGRAM (8275141603)
 # ==========================================
 TELEGRAM_TOKEN = "8275141603:AAGTvEF59ZOaD0rGsXHkitiWOA6TX-wTpRU"
-GROUP_ID = "-1003641918928" # НОВА СУПЕРГРУПА
-DEV_ID = "6856949294"       # Микола
+GROUP_ID = "-1003641918928" 
+DEV_ID = "6856949294"       
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -36,12 +36,10 @@ def load_data(url):
     except: return None
 
 def send_update(payload):
-    """Запис замовлення в Google Таблицю"""
     try: requests.post(SCRIPT_URL, json=payload, timeout=15)
     except: pass
 
 def send_to_telegram(text, target="group"):
-    """Відправка в Telegram"""
     chat_id = GROUP_ID if target == "group" else target
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
@@ -60,8 +58,6 @@ def main():
         return
 
     u = st.session_state.user_info
-    
-    # Динамічне меню (UX покращення)
     cart_count = len(st.session_state.cart)
     cart_sum = sum(v['qty'] * v['price'] for v in st.session_state.cart.values())
     cart_label = f"🛒 Кошик ({cart_count} поз. | {cart_sum:g} ₴)" if cart_count > 0 else "🛒 Кошик"
@@ -83,7 +79,6 @@ def main():
         st.rerun()
 
     clean_choice = "🛒 Кошик" if "🛒 Кошик" in choice else choice
-
     if choice == "🍎 Каталог": show_catalog(u)
     elif clean_choice == "🛒 Кошик": show_cart(u)
     elif choice == "📊 Адмін-панель": show_admin_panel()
@@ -93,22 +88,13 @@ def main():
     elif choice == "🔔 Нагадування": show_reminders(u)
     elif choice == "🚀 Власний додаток?": show_developer_promo()
 
-# --- ЛОГІКА ВХОДУ (ВИПРАВЛЕНО ВЛАСНИКА) ---
 def show_login():
     st.image(LOGO_URL, width=200)
     phone = st.text_input("Введіть номер телефону:")
     if st.button("Увійти", use_container_width=True):
         if phone == OWNER_PHONE:
             st.session_state.logged_in = True
-            # Тепер у Власника заповнене поле Менеджер
-            st.session_state.user_info = {
-                'Назва': 'ВЛАСНИК', 
-                'Роль': 'Власник', 
-                'Телефон': phone,
-                'Менеджер': 'Микола',
-                'Знижка': '0',
-                'Колонка прайс': 'Ціна'
-            }
+            st.session_state.user_info = {'Назва': 'ВЛАСНИК', 'Роль': 'Власник', 'Телефон': phone, 'Менеджер': 'Микола'}
             st.rerun()
         df = load_data(CLIENTS_URL)
         if df is not None:
@@ -120,15 +106,15 @@ def show_login():
             else: st.error("❌ Номер не знайдено.")
 
 def show_catalog(u):
-    st.title("🍎 Каталог товарів")
+    st.title("🍎 Каталог")
     if st.session_state.cart:
         total = sum(v['qty'] * v['price'] for v in st.session_state.cart.values())
-        st.success(f"🛒 У кошику товарів на **{total:g} ₴**. Оформіть замовлення в меню!")
+        st.success(f"🛒 У кошику: **{total:g} ₴**")
 
     df = load_data(SHEET_URL)
     if df is not None:
         p_col = u.get('Колонка прайс', 'Ціна')
-        search = st.text_input("🔍 Швидкий пошук:")
+        search = st.text_input("🔍 Пошук:")
         f_df = df[df['Товар'].str.contains(search, case=False)] if search else df
         for _, row in f_df.iterrows():
             with st.container():
@@ -136,6 +122,10 @@ def show_catalog(u):
                 with c1: st.image(row['Фото'] if pd.notna(row['Фото']) and row['Фото'] else "https://via.placeholder.com/150", use_container_width=True)
                 with c2:
                     st.subheader(row['Товар'])
+                    # --- ПОВЕРНУЛИ ОПИС ТУТ ---
+                    if row.get('Опис') and str(row['Опис']).strip() != "":
+                        st.info(row['Опис'])
+                    # --------------------------
                     p_raw = float(str(row.get(p_col, '0')).replace(',', '.'))
                     st.write(f"💰 **Ціна: {p_raw:g} ₴**")
                     qty = st.number_input(f"Кількість", min_value=0.0, step=1.0, key=f"q_{row['Артикул']}")
@@ -144,9 +134,9 @@ def show_catalog(u):
             st.divider()
 
 def show_cart(u):
-    st.title("🛒 Оформлення")
+    st.title("🛒 Кошик")
     if not st.session_state.cart:
-        st.info("Кошик порожній.")
+        st.info("Порожньо.")
     else:
         total = 0
         items_txt = ""
@@ -162,21 +152,20 @@ def show_cart(u):
                     st.rerun()
             items_txt += f"{name} ({data['qty']} шт.); "
 
-        st.divider()
         st.subheader(f"Сума: {total:g} ₴")
-        addr = st.text_input("Адреса доставки:")
+        addr = st.text_input("Адреса:")
         deliv = st.selectbox("Спосіб", ["Доставка Food Festival", "Самовивіз"])
-        
-        if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
+        if st.button("🚀 ВІДПРАВИТИ", use_container_width=True):
             manager = str(u.get('Менеджер', '')).strip()
             msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n⏰ {delivery_status}\n👤 {u['Назва']}\n📞 {u['Телефон']}\n"
                    f"👨‍💼 Менеджер: {manager}\n💰 Сума: {total:g} ₴\n🚚 {deliv}: {addr}\n🛒 {items_txt}")
-            
             send_to_telegram(msg, target="group")
             send_update({"type": "NEW_ORDER", "phone": u['Телефон'], "client": u['Назва'], "total": total, "items": items_txt, "delivery_address": addr, "delivery_method": deliv, "manager": manager, "comment": delivery_status})
-            st.balloons(); st.success("✅ Замовлено!"); st.session_state.cart = {}; st.rerun()
+            st.balloons(); st.session_state.cart = {}; st.rerun()
 
-# --- (Інші функції без змін) ---
+# (Решта функцій: show_admin_panel, show_history, show_news, show_callback, show_reminders, show_developer_promo)
+# залишаються без змін, як у попередньому коді.
+
 def show_admin_panel():
     st.title("📊 Аналітика")
     df = load_data(ORDERS_URL)
