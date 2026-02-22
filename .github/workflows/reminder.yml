@@ -1,0 +1,26 @@
+name: Scheduled Telegram Reminder
+
+on:
+  schedule:
+    # Час у форматі UTC (07:00 UTC = 09:00 Київ)
+    # 1 - Понеділок, 4 - Четвер
+    - cron: '0 7 * * 1,4'
+  workflow_dispatch: # Дозволяє запустити вручну для тесту
+
+jobs:
+  send-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run reminder script
+        run: python scheduler.py
