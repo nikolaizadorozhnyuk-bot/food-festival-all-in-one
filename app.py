@@ -107,8 +107,8 @@ def main():
         return
 
     u = st.session_state.user_info
-    role = u.get('Роль', 'Client')
-    is_admin = role in ['Owner', 'Admin', 'Manager']
+    role = str(u.get('Роль', 'Client')).strip()
+    is_admin = role in ['Owner', 'Admin', 'Manager', 'Директор', 'Менеджер', 'Власник']
     
     st.sidebar.image(LOGO_URL, width=150)
     st.sidebar.success(f"👤 {u.get('Назва')} | {role}")
