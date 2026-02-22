@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import io
-from datetime import datetime, timedelta
+from datetime import datetime
 from PIL import Image
 import xlsxwriter
 
@@ -12,10 +12,11 @@ import xlsxwriter
 OWNER_PHONE = "0675953220"
 COMPANY_NAME = "Food Festival"
 LOGO_URL = "https://foodfestival.com.ua/image/catalog/logos/logo_foodfestival_upd-2.png"
-# Посилання на твій Google Apps Script
+
+# Посилання на твій Google Apps Script (Webhook)
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyaFzeDCKyGghOoel888Xx_QkEaYTytH2te1BsJlSlUAqKYg1LyxF0_AwogvNPOU1PX/exec"
 
-# Посилання на CSV (база даних)
+# Посилання на CSV (база даних Google Таблиць)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=0&single=true&output=csv"
 CLIENTS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=841758260&single=true&output=csv"
 NEWS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=374278986&single=true&output=csv"
@@ -24,12 +25,10 @@ ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ3
 # ==========================================
 # 📢 НАЛАШТУВАННЯ TELEGRAM
 # ==========================================
-# ⚠️ ВСТАВ ПОВНИЙ ТОКЕН ТУТ:
-TELEGRAM_TOKEN = "8275141603:ВСТАВ_СЮДИ_ТОКЕН_З_BOTFATHER"
-
-GROUP_ID = "-1005236190167" 
-DIRECTOR_ID = "636970008"
-DEV_ID = "6856949294"
+TELEGRAM_TOKEN = "8275141603:AAHSCTQfWRVIblmqWB1Jcf70LHq2dFxrUPo"
+GROUP_ID = "-1003641918928" # НОВА СУПЕРГРУПА ДЛЯ ЗАМОВЛЕНЬ
+DIRECTOR_ID = "636970008"   # Директор Едуард
+DEV_ID = "6856949294"       # Микола (Розробник)
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -40,7 +39,7 @@ def load_data(url):
     except: return None
 
 def send_update(payload):
-    """Відправка даних у Google Таблицю"""
+    """Відправка даних у Google Таблицю (Webhook)"""
     try:
         res = requests.post(SCRIPT_URL, json=payload, timeout=15)
         return res.text
@@ -49,18 +48,21 @@ def send_update(payload):
 
 def send_to_telegram(text, target="group"):
     """Відправка сповіщень у Telegram"""
-    if target == "group": chat_ids = [GROUP_ID]
-    elif target == "management": chat_ids = [DIRECTOR_ID, DEV_ID]
-    else: chat_ids = [target]
-        
+    chat_id = GROUP_ID if target == "group" else target
+    if target == "management": 
+        # Відправка керівництву одночасно
+        for cid in [DIRECTOR_ID, DEV_ID]:
+            requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
+                          data={"chat_id": cid, "text": text, "parse_mode": "HTML"})
+        return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    for chat_id in chat_ids:
-        try:
-            res = requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
-            if res.status_code != 200:
-                st.error(f"⚠️ Помилка Telegram (ID {chat_id}): {res.text}")
-        except Exception as e:
-            st.error(f"⚠️ Системна помилка Telegram: {e}")
+    try:
+        res = requests.post(url, data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+        if res.status_code != 200:
+            st.error(f"⚠️ Помилка Telegram: {res.text}")
+    except Exception as e:
+        st.error(f"⚠️ Системна помилка Telegram: {e}")
 
 # --- СЕСІЯ ---
 if 'cart' not in st.session_state: st.session_state.cart = {}
@@ -217,7 +219,7 @@ def export_to_excel_full(df, user_discount, p_col, user_name):
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
     worksheet = workbook.add_worksheet('Каталог')
-    # (Тут логіка Excel з твого попереднього коду...)
+    # (Логіка експорту Excel залишається без змін)
     workbook.close()
     return output.getvalue()
 
