@@ -21,14 +21,14 @@ NEWS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36H
 ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=157728024&single=true&output=csv"
 
 # ==========================================
-# 📢 НАЛАШТУВАННЯ TELEGRAM-МАРШРУТИЗАЦІЇ
+# 📢 НАЛАШТУВАННЯ TELEGRAM
 # ==========================================
-# ⚠️ ВСТАВ СЮДИ СВІЙ ПОВНИЙ ТОКЕН ВІД НОВОГО БОТА (з літерами після двокрапки):
-TELEGRAM_TOKEN = "8297615872:АА_ТВІЙ_ПОВНИЙ_ТОКЕН_З_BOTFATHER_ТУТ"
+# Токен бота для замовлень
+TELEGRAM_TOKEN = "8183938320:AAHsDhUXcu3ZeKg8Qh3AZc3xbXMa9YqqqZc"
 
-GROUP_ID = "8275141603:AAGTvEF59ZOaD0rGsXHkitiWOA6TX-wTpRU" # Супергрупа для замовлень
+GROUP_ID = "-1005236190167" # Група для замовлень (з обов'язковим -100)
 DIRECTOR_ID = "636970008"   # Директор Едуард
-DEV_ID = "8297615872:AAHSCTQfWRVIblmqWB1Jcf70LHq2dFxrUPo"       # Микола (Розробник)
+DEV_ID = "6856949294"       # Микола (Розробник)
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -69,19 +69,15 @@ if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 def show_developer_promo():
     st.title("🚀 Бажаєте такий додаток для свого бізнесу?")
     col1, col2 = st.columns([2, 1])
-    
     with col1:
         st.markdown("""
         ### Перетворіть ваш бізнес на цифрову систему!
         Я розробляю індивідуальні рішення, які допомагають автоматизувати продажі та звітність:
-        
         * **✅ Мобільний каталог та кошик**
         * **✅ База на Google Таблицях**
         * **✅ Розумні Telegram-боти**
         * **✅ Адмін-панелі**
-        * **✅ Автоматизація рутини**
         """)
-    
     with col2:
         st.image("https://cdn-icons-png.flaticon.com/512/3142/3142121.png", use_container_width=True)
 
@@ -99,7 +95,6 @@ def main():
 
     u = st.session_state.user_info
     role = str(u.get('Роль', 'Client')).strip()
-    # Підтримуємо українські ролі з таблиці!
     is_admin = role in ['Owner', 'Admin', 'Manager', 'Директор', 'Менеджер', 'Власник']
     
     st.sidebar.image(LOGO_URL, width=150)
@@ -136,38 +131,24 @@ def main():
     footer_html = """<div style='text-align: center; color: #888; font-size: 13px; padding-bottom: 20px;'>Розроблено <b>Миколою Задорожнюком</b> | 🚀 Automation & ERP Solutions © 2026<br>Бажаєте автоматизувати свій бізнес? <a href='https://t.me/FoodFestival_Odesa' target='_blank' style='color: #4CAF50; text-decoration: none; font-weight: bold;'>Замовити розробку</a></div>"""
     st.markdown(footer_html, unsafe_allow_html=True)
 
-# --- РОЗДІЛ: АДМІН-ПАНЕЛЬ (АНАЛІТИКА) ---
+# --- РОЗДІЛ: АДМІН-ПАНЕЛЬ ---
 def show_admin_panel():
     st.title("📊 Аналітика продажів")
     df = load_data(ORDERS_URL)
-    
     if df is not None and not df.empty:
         df['Сума'] = pd.to_numeric(df['Сума'], errors='coerce').fillna(0)
         df['Дата_dt'] = pd.to_datetime(df['Дата'], format='%d.%m.%Y %H:%M:%S', errors='coerce')
-        
         c1, c2, c3 = st.columns(3)
         total_sales = df['Сума'].sum()
         this_month = df[df['Дата_dt'] >= datetime.now().replace(day=1)]['Сума'].sum()
         active_clients = df['Телефон'].nunique()
-        
         c1.metric("Загальний оборот", f"{total_sales:,.0f} ₴".replace(',', ' '))
         c2.metric("Оборот за місяць", f"{this_month:,.0f} ₴".replace(',', ' '))
         c3.metric("Унікальних клієнтів", active_clients)
-        
         st.divider()
         st.subheader("📈 Динаміка замовлень")
         chart_data = df.groupby(df['Дата_dt'].dt.date)['Сума'].sum()
         st.area_chart(chart_data)
-        
-        st.subheader("🏆 Топ затребуваних товарів")
-        all_items = []
-        for items_str in df['Товари']:
-            parts = [p.split(' (')[0].strip() for p in str(items_str).split(';') if '(' in p]
-            all_items.extend(parts)
-        
-        if all_items:
-            top_df = pd.Series(all_items).value_counts().head(10)
-            st.bar_chart(top_df)
     else:
         st.warning("Дані для аналітики поки відсутні.")
 
@@ -246,7 +227,6 @@ def show_cart(u):
         
         if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
             
-            # 👨‍💼 Витягуємо менеджера та додаємо в Telegram-сповіщення
             manager = str(u.get('Менеджер', '')).strip()
             manager_line = f"👨‍💼 <b>Менеджер:</b> {manager}\n" if manager else ""
 
@@ -262,7 +242,6 @@ def show_cart(u):
             
             send_to_telegram(msg, target="group")
             
-            # Передаємо дані в Google Таблицю (включаючи менеджера)
             send_update({
                 "type": "NEW_ORDER", 
                 "phone": u['Телефон'], 
@@ -342,13 +321,11 @@ def export_to_excel_full(df, user_discount, p_col, user_name):
         
     for row_num, (_, row) in enumerate(df.iterrows(), start=7):
         worksheet.set_row(row_num, 60)
-        
         img_url = str(row.get('Фото', '')).strip()
         if img_url.startswith('http'):
             try:
                 headers_req = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                 img_resp = requests.get(img_url, headers=headers_req, timeout=5)
-                
                 if img_resp.status_code == 200:
                     img_data = io.BytesIO(img_resp.content)
                     try:
@@ -357,7 +334,6 @@ def export_to_excel_full(df, user_discount, p_col, user_name):
                             img = img.convert('RGB')
                             img_data = io.BytesIO()
                             img.save(img_data, format='JPEG')
-                        
                         img_data.seek(0)
                         worksheet.insert_image(row_num, 0, img_url, {'image_data': img_data, 'x_scale': 0.15, 'y_scale': 0.15, 'object_position': 1})
                     except Exception:
@@ -373,7 +349,6 @@ def export_to_excel_full(df, user_discount, p_col, user_name):
         worksheet.write(row_num, 2, str(row.get('Товар', '')), border_left)
         worksheet.write(row_num, 3, str(row.get('Артикул', '')), border_center)
         worksheet.write(row_num, 4, str(row.get('Залишок', '')), border_center)
-        
         try:
             p = float(str(row.get(p_col, '0')).replace(',', '.'))
             worksheet.write(row_num, 5, p, money)
