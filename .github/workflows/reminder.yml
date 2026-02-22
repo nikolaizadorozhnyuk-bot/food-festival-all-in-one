@@ -1,26 +1,29 @@
-name: Scheduled Telegram Reminder
+name: Scheduled Business Reports
 
 on:
   schedule:
-    # Час у форматі UTC (07:00 UTC = 09:00 Київ)
-    # 1 - Понеділок, 4 - Четвер
-    - cron: '0 7 * * 1,4'
-  workflow_dispatch: # Дозволяє запустити вручну для тесту
+    # 13:00 UTC = 15:00 за Києвом (Щодня)
+    - cron: '0 13 * * *'
+    # 14:00 UTC = 16:00 за Києвом (Щоп'ятниці)
+    - cron: '0 14 * * 5'
+  workflow_dispatch:
 
 jobs:
-  send-reminder:
+  reports:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Run reminder script
-        run: python scheduler.py
+      - run: pip install requests pandas
+      
+      # Запуск щоденного звіту о 15:00
+      - name: Daily Manager Reports
+        if: github.event.schedule == '0 13 * * *' || github.event_name == 'workflow_dispatch'
+        run: python scheduler.py daily
+        
+      # Запуск тижневого звіту о 16:00 у п'ятницю
+      - name: Weekly Director Report
+        if: github.event.schedule == '0 14 * * 5'
+        run: python scheduler.py weekly
