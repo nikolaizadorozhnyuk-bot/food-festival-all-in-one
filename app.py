@@ -21,11 +21,11 @@ ORDERS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ3
 NEWS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=374278986&single=true&output=csv"
 
 # ==========================================
-# 📢 TELEGRAM (8275141603)
+# 📢 TELEGRAM
 # ==========================================
 TELEGRAM_TOKEN = "8275141603:AAGTvEF59ZOaD0rGsXHkitiWOA6TX-wTpRU"
-GROUP_ID = "-1003641918928" # НОВА СУПЕРГРУПА
-DEV_ID = "6856949294"       # Твій ID
+GROUP_ID = "-1003641918928" 
+DEV_ID = "6856949294"       
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -45,13 +45,11 @@ def send_order_with_photos(text, photos):
     url_msg = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     url_media = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMediaGroup"
     
-    # 1. Текст замовлення
     requests.post(url_msg, data={"chat_id": GROUP_ID, "text": text, "parse_mode": "HTML"})
     
-    # 2. Фото товарів (макс 10)
     if photos:
         media = []
-        for img in list(dict.fromkeys(photos))[:10]: # Прибираємо дублікати та обмежуємо 10 фото
+        for img in list(dict.fromkeys(photos))[:10]: 
             media.append({"type": "photo", "media": img})
         try:
             requests.post(url_media, json={"chat_id": GROUP_ID, "media": media}, timeout=10)
@@ -84,7 +82,7 @@ def main():
     is_admin = role in ['Owner', 'Admin', 'Manager', 'Директор', 'Менеджер', 'Власник']
     
     st.sidebar.image(LOGO_URL, width=150)
-    st.sidebar.success(f"👤 {u.get('Назва')} | {role}") # ТУТ БУДЕ НОВЕ ІМ'Я
+    st.sidebar.success(f"👤 {u.get('Назва')} | {role}") 
     
     menu = ["🍎 Каталог", cart_label, "📜 Історія замовлень", "📰 Новини", "📞 Дзвінок", "🚀 ERP Системи"]
     if is_admin:
@@ -106,14 +104,13 @@ def main():
     elif choice == "🔔 Нагадування": show_reminders(u)
     elif choice == "🚀 ERP Системи": show_developer_promo()
 
-# --- ЛОГІКА ВХОДУ (ОНОВЛЕНО ІМ'Я ВЛАСНИКА) ---
+# --- ЛОГІКА ВХОДУ ---
 def show_login():
     st.image(LOGO_URL, width=200)
     phone = st.text_input("Введіть номер телефону:")
     if st.button("Увійти", use_container_width=True):
         if phone == OWNER_PHONE:
             st.session_state.logged_in = True
-            # ЗАМІНИЛИ 'ВЛАСНИК' НА 'Микола Задорожнюк'
             st.session_state.user_info = {
                 'Назва': 'Микола Задорожнюк', 
                 'Роль': 'Власник', 
@@ -143,7 +140,9 @@ def show_catalog(u):
         p_col = u.get('Колонка прайс', 'Ціна')
         search = st.text_input("🔍 Швидкий пошук:")
         f_df = df[df['Товар'].str.contains(search, case=False)] if search else df
-        for _, row in f_df.iterrows():
+        
+        # ВИПРАВЛЕННЯ: додаємо idx, щоб ключ завжди був унікальним
+        for idx, row in f_df.iterrows():
             with st.container():
                 c1, c2 = st.columns([1, 2])
                 with c1: st.image(row['Фото'] if pd.notna(row['Фото']) and row['Фото'] else "https://via.placeholder.com/150", use_container_width=True)
@@ -153,8 +152,13 @@ def show_catalog(u):
                         st.info(row['Опис'])
                     p_raw = float(str(row.get(p_col, '0')).replace(',', '.'))
                     st.write(f"💰 **Ціна: {p_raw:g} ₴**")
-                    qty = st.number_input(f"Кількість", min_value=0.0, step=1.0, key=f"q_{row['Артикул']}")
-                    if qty > 0: st.session_state.cart[row['Товар']] = {'qty': qty, 'price': p_raw, 'art': row['Артикул']}
+                    
+                    # 100% унікальний ключ (Артикул + номер рядка)
+                    art = row.get('Артикул', 'no_art')
+                    unique_key = f"q_{art}_{idx}"
+                    
+                    qty = st.number_input(f"Кількість", min_value=0.0, step=1.0, key=unique_key)
+                    if qty > 0: st.session_state.cart[row['Товар']] = {'qty': qty, 'price': p_raw, 'art': art}
                     elif row['Товар'] in st.session_state.cart: del st.session_state.cart[row['Товар']]
             st.divider()
 
@@ -165,13 +169,15 @@ def show_cart(u):
     else:
         total = 0; items_txt = ""
         delivery_status = "ДОСТАВКА НА СЬОГОДНІ" if datetime.now().hour < 11 else "ДОСТАВКА НА ЗАВТРА"
-        for name, data in list(st.session_state.cart.items()):
+        
+        # Створюємо унікальні ключі і для видалення в кошику
+        for i, (name, data) in enumerate(list(st.session_state.cart.items())):
             line_sum = data['qty'] * data['price']
             total += line_sum
             c_txt, c_del = st.columns([4, 1])
             with c_txt: st.write(f"• **{name}** — {data['qty']} шт. ({line_sum:g} ₴)")
             with c_del:
-                if st.button("❌", key=f"del_{data['art']}"):
+                if st.button("❌", key=f"del_{data['art']}_{i}"):
                     del st.session_state.cart[name]; st.rerun()
             items_txt += f"{name} ({data['qty']} шт.); "
 
@@ -184,7 +190,6 @@ def show_cart(u):
             msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n⏰ {delivery_status}\n👤 {u['Назва']}\n📞 {u['Телефон']}\n"
                    f"👨‍💼 Менеджер: {manager}\n💰 Сума: {total:g} ₴\n🚚 {deliv}: {addr}\n🛒 {items_txt}")
             
-            # Збираємо фото товарів
             photos = []
             df_p = load_data(SHEET_URL)
             for item_name in st.session_state.cart.keys():
@@ -193,10 +198,7 @@ def show_cart(u):
                     img_url = str(item_data.iloc[0].get('Фото', '')).strip()
                     if img_url.startswith('http'): photos.append(img_url)
 
-            # Відправка в Telegram з фото
             send_order_with_photos(msg, photos)
-            
-            # Запис у таблицю
             send_update({"type": "NEW_ORDER", "phone": u['Телефон'], "client": u['Назва'], "total": total, "items": items_txt, "delivery_address": addr, "delivery_method": deliv, "manager": manager, "comment": delivery_status})
             st.balloons(); st.session_state.cart = {}; st.rerun()
 
