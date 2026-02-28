@@ -4,7 +4,6 @@ import requests
 import io
 from datetime import datetime
 from PIL import Image
-import xlsxwriter
 
 # ==========================================
 # 🔑 НАЛАШТУВАННЯ (FOOD FESTIVAL)
@@ -25,7 +24,7 @@ NEWS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36H
 # ==========================================
 TELEGRAM_TOKEN = "8275141603:AAGTvEF59ZOaD0rGsXHkitiWOA6TX-wTpRU"
 GROUP_ID = "-1003641918928" 
-DEV_ID = "6856949294"       
+DEV_ID = "6856949294"        
 
 st.set_page_config(page_title="Food Festival ERP", page_icon=LOGO_URL, layout="wide")
 
@@ -138,28 +137,68 @@ def show_catalog(u):
     df = load_data(SHEET_URL)
     if df is not None:
         p_col = u.get('Колонка прайс', 'Ціна')
-        search = st.text_input("🔍 Швидкий пошук:")
-        f_df = df[df['Товар'].str.contains(search, case=False)] if search else df
         
-        # ВИПРАВЛЕННЯ: додаємо idx, щоб ключ завжди був унікальним
+        # --- НОВИЙ ФІЛЬТР ПО КАТЕГОРІЯХ ---
+        categories = ["Всі категорії"] + sorted([c for c in df['Категорія'].unique() if str(c).strip()])
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_category = st.selectbox("📁 Фільтр по категорії:", categories)
+        with col2:
+            search = st.text_input("🔍 Швидкий пошук по назві:")
+
+        # Застосовуємо фільтри
+        f_df = df
+        if selected_category != "Всі категорії":
+            f_df = f_df[f_df['Категорія'] == selected_category]
+        if search:
+            f_df = f_df[f_df['Назва'].str.contains(search, case=False, na=False)]
+        
+        # ВИВІД ТОВАРІВ (З новими колонками)
         for idx, row in f_df.iterrows():
             with st.container():
                 c1, c2 = st.columns([1, 2])
-                with c1: st.image(row['Фото'] if pd.notna(row['Фото']) and row['Фото'] else "https://via.placeholder.com/150", use_container_width=True)
+                with c1: 
+                    img_url = str(row.get('Фото', '')).strip()
+                    if img_url and img_url.startswith('http'):
+                        st.image(img_url, use_container_width=True)
+                    else:
+                        st.image("https://via.placeholder.com/150", use_container_width=True)
+                
                 with c2:
-                    st.subheader(row['Товар'])
-                    if row.get('Опис') and str(row['Опис']).strip() != "":
-                        st.info(row['Опис'])
+                    item_name = str(row.get('Назва', 'Без назви'))
+                    st.subheader(item_name)
+                    
+                    desc = str(row.get('Опис (укр)', '')).strip()
+                    if desc:
+                        st.info(desc)
+                    
+                    # Виводимо колір та залишок
+                    color = str(row.get('Колір', '')).strip()
+                    stock = str(row.get('Остаток_Тек', '')).strip()
+                    
+                    meta_info = []
+                    if color: meta_info.append(f"🎨 Колір: **{color}**")
+                    if stock and float(stock.replace(',','.')) > 0: 
+                        meta_info.append(f"📦 В наявності: **{stock} шт.**")
+                    if meta_info:
+                        st.caption(" | ".join(meta_info))
+
                     p_raw = float(str(row.get(p_col, '0')).replace(',', '.'))
                     st.write(f"💰 **Ціна: {p_raw:g} ₴**")
                     
-                    # 100% унікальний ключ (Артикул + номер рядка)
-                    art = row.get('Артикул', 'no_art')
+                    art = str(row.get('upc', 'no_art')).strip()
                     unique_key = f"q_{art}_{idx}"
                     
-                    qty = st.number_input(f"Кількість", min_value=0.0, step=1.0, key=unique_key)
-                    if qty > 0: st.session_state.cart[row['Товар']] = {'qty': qty, 'price': p_raw, 'art': art}
-                    elif row['Товар'] in st.session_state.cart: del st.session_state.cart[row['Товар']]
+                    # Беремо поточну кількість з кошика, щоб не збивалась при зміні категорії
+                    current_qty = float(st.session_state.cart.get(item_name, {}).get('qty', 0.0))
+                    
+                    qty = st.number_input(f"Кількість", min_value=0.0, step=1.0, value=current_qty, key=unique_key)
+                    
+                    if qty > 0: 
+                        st.session_state.cart[item_name] = {'qty': qty, 'price': p_raw, 'art': art}
+                    elif item_name in st.session_state.cart: 
+                        del st.session_state.cart[item_name]
             st.divider()
 
 def show_cart(u):
@@ -170,7 +209,6 @@ def show_cart(u):
         total = 0; items_txt = ""
         delivery_status = "ДОСТАВКА НА СЬОГОДНІ" if datetime.now().hour < 11 else "ДОСТАВКА НА ЗАВТРА"
         
-        # Створюємо унікальні ключі і для видалення в кошику
         for i, (name, data) in enumerate(list(st.session_state.cart.items())):
             line_sum = data['qty'] * data['price']
             total += line_sum
@@ -193,7 +231,8 @@ def show_cart(u):
             photos = []
             df_p = load_data(SHEET_URL)
             for item_name in st.session_state.cart.keys():
-                item_data = df_p[df_p['Товар'] == item_name]
+                # Виправляємо пошук фото по новій колонці 'Назва'
+                item_data = df_p[df_p['Назва'] == item_name]
                 if not item_data.empty:
                     img_url = str(item_data.iloc[0].get('Фото', '')).strip()
                     if img_url.startswith('http'): photos.append(img_url)
