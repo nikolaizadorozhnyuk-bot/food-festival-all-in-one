@@ -27,7 +27,6 @@ def load_data(url):
     except: return None
 
 # --- КОШИК ---
-# --- КОШИК ---
 def show_cart(u):
     st.title("🛒 Ваше замовлення")
     if not st.session_state.cart:
@@ -121,25 +120,6 @@ def show_cart(u):
         st.balloons()
         st.session_state.cart = {}
         st.success(f"Замовлення на {date_str} успішно надіслано!")
-        
-        # Красиве повідомлення в Telegram
-        msg = (
-            f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n"
-            f"👤 <b>Клієнт:</b> {u['Назва']}\n"
-            f"📞 <b>Телефон:</b> {u['Телефон']}\n"
-            f"📅 <b>Дата на коли:</b> {date_str}\n"
-            f"🚚 <b>Спосіб:</b> {deliv}\n"
-            f"📍 <b>Адреса:</b> {addr if addr else 'Самовивіз'}\n"
-            f"💰 <b>Сума:</b> {total:g} ₴\n\n"
-            f"🛒 <b>ТОВАРИ:</b>\n{items_txt}"
-        )
-        
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
-                      data={"chat_id": GROUP_ID, "text": msg, "parse_mode": "HTML"})
-        
-        st.balloons()
-        st.session_state.cart = {}
-        st.success(f"Замовлення на {date_str} успішно надіслано!")
 
 # --- КАТАЛОГ ---
 def show_catalog(u):
@@ -200,10 +180,16 @@ def show_catalog(u):
                 display_name = f"🔥 {row.get('Назва', 'Без назви')}" if is_promo else row.get('Назва', 'Без назви')
                 st.subheader(display_name)
                 
-                # Чистимо опис від технічної мітки
-                if row.get('Опис (укр)'): 
-                    clean_desc = str(row['Опис (укр)']).replace('! АКЦІЯ', '').strip()
-                    if clean_desc: st.info(clean_desc)
+                # === БЛОК ЗГОРТАННЯ ОПИСУ (ЗГОРНУТО) ===
+                raw_desc = row.get('Опис (укр)', '').strip()
+                if raw_desc:
+                    # Чистимо опис від технічної мітки акції перед показом
+                    clean_desc = raw_desc.replace('! АКЦІЯ', '').strip()
+                    if clean_desc:
+                        # Красиве згортання: Опис з'являється як спливаюче вікно під кнопкою
+                        with st.popover("📖 Читати опис"):
+                            st.info(clean_desc)
+                # ========================================
                 
                 try:
                     price_str = str(row.get('Ціна', '0')).replace(',', '.').strip()
