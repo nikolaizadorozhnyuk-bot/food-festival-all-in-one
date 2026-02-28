@@ -27,6 +27,7 @@ def load_data(url):
     except: return None
 
 # --- КОШИК ---
+# --- КОШИК ---
 def show_cart(u):
     st.title("🛒 Ваше замовлення")
     if not st.session_state.cart:
@@ -35,6 +36,7 @@ def show_cart(u):
 
     total = 0
     items_txt = ""
+    has_meat = False # Створюємо "детектор м'яса"
     
     col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
     col_h1.caption("Товар")
@@ -46,6 +48,10 @@ def show_cart(u):
         line_sum = data['qty'] * data['price']
         total += line_sum
         
+        # Якщо в кошику є товар з категорії "Свіже м'ясо", вмикаємо детектор
+        if data.get('category', '') == "Свіже м'ясо":
+            has_meat = True
+            
         c1, c2, c3 = st.columns([3, 1, 1])
         with c1:
             st.write(f"**{name}**")
@@ -57,34 +63,64 @@ def show_cart(u):
                 del st.session_state.cart[name]
                 st.rerun()
         
-        # Красиво форматуємо товари для Телеграму в стовпчик
         items_txt += f"• {name} - {data['qty']:g} шт.\n"
 
     st.divider()
     st.subheader(f"💰 Разом до сплати: {total:g} ₴")
     st.markdown("---")
     
-    # === НОВИЙ БЛОК: КАЛЕНДАР ТА ДОСТАВКА ===
+    # === РОЗУМНИЙ КАЛЕНДАР ДОСТАВКИ ===
     st.subheader("🚚 Дані доставки")
     
     c_date, c_deliv = st.columns(2)
     with c_date:
-        # Мінімальна дата — завжди завтра
-        tomorrow = date.today() + timedelta(days=1)
-        delivery_date = st.date_input("📅 Бажана дата доставки:", min_value=tomorrow, value=tomorrow)
+        if has_meat:
+            min_days = 2
+            st.warning("🥩 У кошику є свіже м'ясо (мінімум 2 дні на підготовку).")
+        else:
+            min_days = 1
+            
+        min_date = date.today() + timedelta(days=min_days)
+        delivery_date = st.date_input("📅 Бажана дата доставки:", min_value=min_date, value=min_date)
     
     with c_deliv:
         deliv = st.selectbox("🚚 Спосіб отримання:", ["Доставка Food Festival", "Самовивіз"])
     
     addr = st.text_input("📍 Адреса доставки (обов'язково для доставки):")
+    
+    # ПЕРЕВІРКА ДНІВ ТИЖНЯ (0 - Понеділок, 6 - Неділя)
+    is_valid_date = True
+    if has_meat and delivery_date.weekday() in [0, 6]:
+        st.error("❌ Свіже м'ясо не доставляється в Неділю та Понеділок. Оберіть, будь ласка, інший день.")
+        is_valid_date = False
+
     st.markdown("---")
     
-    if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
+    # Кнопка відправки ЗАБЛОКОВАНА, якщо обрано неправильний день для м'яса
+    if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True, disabled=not is_valid_date):
         if not addr and deliv != "Самовивіз":
             st.error("Вкажіть адресу для доставки!")
             return
         
         date_str = delivery_date.strftime("%d.%m.%Y")
+        
+        msg = (
+            f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n"
+            f"👤 <b>Клієнт:</b> {u['Назва']}\n"
+            f"📞 <b>Телефон:</b> {u['Телефон']}\n"
+            f"📅 <b>Дата на коли:</b> {date_str}\n"
+            f"🚚 <b>Спосіб:</b> {deliv}\n"
+            f"📍 <b>Адреса:</b> {addr if addr else 'Самовивіз'}\n"
+            f"💰 <b>Сума:</b> {total:g} ₴\n\n"
+            f"🛒 <b>ТОВАРИ:</b>\n{items_txt}"
+        )
+        
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
+                      data={"chat_id": GROUP_ID, "text": msg, "parse_mode": "HTML"})
+        
+        st.balloons()
+        st.session_state.cart = {}
+        st.success(f"Замовлення на {date_str} успішно надіслано!")
         
         # Красиве повідомлення в Telegram
         msg = (
