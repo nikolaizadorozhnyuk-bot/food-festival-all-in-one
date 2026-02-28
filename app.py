@@ -18,6 +18,30 @@ GROUP_ID = "-1003641918928"
 
 st.set_page_config(page_title="Food Festival", page_icon=LOGO_URL, layout="wide")
 
+# === МАГІЯ CSS: БІЛЬШІ КНОПКИ ТА ПУЛЬСАЦІЯ ПЛЮСА ===
+st.markdown("""
+<style>
+/* Збільшуємо розмір кнопок +/- у всіх полях кількості (і в каталозі, і в кошику) */
+button[data-testid="stNumberInputStepDown"], 
+button[data-testid="stNumberInputStepUp"] {
+    transform: scale(1.4);
+    margin: 0 10px;
+}
+
+/* Додаємо ефект пульсації (моргання) виключно для кнопки ПЛЮС */
+@keyframes pulse-plus {
+    0% { transform: scale(1.4); background-color: transparent; }
+    50% { transform: scale(1.55); background-color: rgba(255, 75, 75, 0.15); border-radius: 4px; }
+    100% { transform: scale(1.4); background-color: transparent; }
+}
+
+button[data-testid="stNumberInputStepUp"] {
+    animation: pulse-plus 1.5s infinite;
+    color: #ff4b4b !important; /* Робимо сам плюсик червоним для акценту */
+}
+</style>
+""", unsafe_allow_html=True)
+
 @st.cache_data(ttl=30)
 def load_data(url):
     try: 
@@ -35,11 +59,12 @@ def show_cart(u):
 
     total = 0
     items_txt = ""
-    has_meat = False # Створюємо "детектор м'яса"
+    has_meat = False
     
-    col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
+    # Трохи змінив пропорції колонок, щоб поле кількості гарно влізло
+    col_h1, col_h2, col_h3 = st.columns([2, 2, 1])
     col_h1.caption("Товар")
-    col_h2.caption("К-сть")
+    col_h2.caption("К-сть (можна змінити)")
     col_h3.caption("Видалити")
     st.divider()
 
@@ -47,16 +72,32 @@ def show_cart(u):
         line_sum = data['qty'] * data['price']
         total += line_sum
         
-        # Якщо в кошику є товар з категорії "Свіже м'ясо", вмикаємо детектор
         if data.get('category', '') == "Свіже м'ясо":
             has_meat = True
             
-        c1, c2, c3 = st.columns([3, 1, 1])
+        c1, c2, c3 = st.columns([2, 2, 1])
         with c1:
             st.write(f"**{name}**")
             st.caption(f"{data['price']:g} ₴/од.")
         with c2:
-            st.write(f"{data['qty']:g}")
+            # ТЕПЕР ТУТ МОЖНА РЕДАГУВАТИ КІЛЬКІСТЬ (Плюс та мінус працюють прямо в кошику)
+            new_qty = st.number_input(
+                "К-сть", 
+                min_value=0.0, 
+                step=1.0, 
+                value=float(data['qty']), 
+                key=f"cart_q_{i}", 
+                label_visibility="collapsed"
+            )
+            
+            # Якщо клієнт змінив кількість
+            if new_qty != data['qty']:
+                if new_qty == 0:
+                    del st.session_state.cart[name] # Якщо зменшив до нуля - видаляємо
+                else:
+                    st.session_state.cart[name]['qty'] = new_qty
+                st.rerun() # Оновлюємо сторінку, щоб перерахувати суму
+                
         with c3:
             if st.button("❌", key=f"del_{i}"):
                 del st.session_state.cart[name]
@@ -87,7 +128,6 @@ def show_cart(u):
     
     addr = st.text_input("📍 Адреса доставки (обов'язково для доставки):")
     
-    # ПЕРЕВІРКА ДНІВ ТИЖНЯ (0 - Понеділок, 6 - Неділя)
     is_valid_date = True
     if has_meat and delivery_date.weekday() in [0, 6]:
         st.error("❌ Свіже м'ясо не доставляється в Неділю та Понеділок. Оберіть, будь ласка, інший день.")
@@ -95,7 +135,6 @@ def show_cart(u):
 
     st.markdown("---")
     
-    # Кнопка відправки ЗАБЛОКОВАНА, якщо обрано неправильний день для м'яса
     if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True, disabled=not is_valid_date):
         if not addr and deliv != "Самовивіз":
             st.error("Вкажіть адресу для доставки!")
@@ -129,7 +168,6 @@ def show_catalog(u):
         st.error("Не вдалося завантажити дані таблиці.")
         return
 
-    # Формуємо список категорій, ховаємо сміття, додаємо Акції
     all_cats = sorted([str(c) for c in df['Категорія'].unique() if str(c).strip()])
     if "000 Мусор" in all_cats: 
         all_cats.remove("000 Мусор")
@@ -140,7 +178,6 @@ def show_catalog(u):
     with c1: sel_cat = st.selectbox("📁 Категорія:", categories)
     with c2: search = st.text_input("🔍 Пошук товару:")
 
-    # === БАНЕР ДЛЯ СВІЖОГО М'ЯСА ===
     if sel_cat == "Свіже м'ясо":
         st.warning(
             "🥩 **УВАГА: Спеціальні умови замовлення на СВІЖЕ М'ЯСО!**\n\n"
@@ -151,7 +188,6 @@ def show_catalog(u):
 
     f_df = df
     
-    # ЛОГІКА АКЦІЙ ТА ФІЛЬТРАЦІЯ
     if sel_cat == "🔥 АКЦІЙНІ ТОВАРИ":
         f_df = f_df[f_df['Опис (укр)'].str.contains('АКЦІЯ|акція', case=False, na=False)]
         if f_df.empty:
@@ -165,7 +201,6 @@ def show_catalog(u):
 
     if search: f_df = f_df[f_df['Назва'].str.contains(search, case=False, na=False)]
 
-    # ВИВІД КАРТОК
     for idx, row in f_df.iterrows():
         with st.container():
             col_img, col_txt = st.columns([1, 2])
@@ -175,21 +210,16 @@ def show_catalog(u):
                 else: st.image("https://via.placeholder.com/300?text=Food+Festival", use_container_width=True)
             
             with col_txt:
-                # ВОГНИК для акційних товарів
                 is_promo = 'акція' in str(row.get('Опис (укр)', '')).lower()
                 display_name = f"🔥 {row.get('Назва', 'Без назви')}" if is_promo else row.get('Назва', 'Без назви')
                 st.subheader(display_name)
                 
-                # === БЛОК ЗГОРТАННЯ ОПИСУ (ЗГОРНУТО) ===
                 raw_desc = row.get('Опис (укр)', '').strip()
                 if raw_desc:
-                    # Чистимо опис від технічної мітки акції перед показом
                     clean_desc = raw_desc.replace('! АКЦІЯ', '').strip()
                     if clean_desc:
-                        # Красиве згортання: Опис з'являється як спливаюче вікно під кнопкою
                         with st.popover("📖 Читати опис"):
                             st.info(clean_desc)
-                # ========================================
                 
                 try:
                     price_str = str(row.get('Ціна', '0')).replace(',', '.').strip()
