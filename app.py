@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta, date
 
 # ==========================================
 # 🔑 НАЛАШТУВАННЯ
@@ -22,12 +22,11 @@ st.set_page_config(page_title="Food Festival", page_icon=LOGO_URL, layout="wide"
 def load_data(url):
     try: 
         df = pd.read_csv(url, dtype=str).fillna('')
-        # Очищаємо назви колонок від зайвих пробілів
         df.columns = df.columns.str.strip()
         return df
     except: return None
 
-# --- КОШИК (БЕЗ ОПИСІВ) ---
+# --- КОШИК ---
 def show_cart(u):
     st.title("🛒 Ваше замовлення")
     if not st.session_state.cart:
@@ -57,26 +56,54 @@ def show_cart(u):
             if st.button("❌", key=f"del_{i}"):
                 del st.session_state.cart[name]
                 st.rerun()
-        items_txt += f"{name} ({data['qty']} шт.); "
+        
+        # Красиво форматуємо товари для Телеграму в стовпчик
+        items_txt += f"• {name} - {data['qty']:g} шт.\n"
 
     st.divider()
     st.subheader(f"💰 Разом до сплати: {total:g} ₴")
+    st.markdown("---")
     
-    addr = st.text_input("📍 Адреса доставки:")
-    deliv = st.selectbox("🚚 Спосіб отримання:", ["Доставка Food Festival", "Самовивіз"])
+    # === НОВИЙ БЛОК: КАЛЕНДАР ТА ДОСТАВКА ===
+    st.subheader("🚚 Дані доставки")
+    
+    c_date, c_deliv = st.columns(2)
+    with c_date:
+        # Мінімальна дата — завжди завтра
+        tomorrow = date.today() + timedelta(days=1)
+        delivery_date = st.date_input("📅 Бажана дата доставки:", min_value=tomorrow, value=tomorrow)
+    
+    with c_deliv:
+        deliv = st.selectbox("🚚 Спосіб отримання:", ["Доставка Food Festival", "Самовивіз"])
+    
+    addr = st.text_input("📍 Адреса доставки (обов'язково для доставки):")
+    st.markdown("---")
     
     if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
         if not addr and deliv != "Самовивіз":
-            st.error("Вкажіть адресу!")
+            st.error("Вкажіть адресу для доставки!")
             return
         
-        msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n👤 {u['Назва']}\n📞 {u['Телефон']}\n💰 Сума: {total:g} ₴\n🛒 {items_txt}")
+        date_str = delivery_date.strftime("%d.%m.%Y")
+        
+        # Красиве повідомлення в Telegram
+        msg = (
+            f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n"
+            f"👤 <b>Клієнт:</b> {u['Назва']}\n"
+            f"📞 <b>Телефон:</b> {u['Телефон']}\n"
+            f"📅 <b>Дата на коли:</b> {date_str}\n"
+            f"🚚 <b>Спосіб:</b> {deliv}\n"
+            f"📍 <b>Адреса:</b> {addr if addr else 'Самовивіз'}\n"
+            f"💰 <b>Сума:</b> {total:g} ₴\n\n"
+            f"🛒 <b>ТОВАРИ:</b>\n{items_txt}"
+        )
+        
         requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
                       data={"chat_id": GROUP_ID, "text": msg, "parse_mode": "HTML"})
         
         st.balloons()
         st.session_state.cart = {}
-        st.success("Замовлення надіслано!")
+        st.success(f"Замовлення на {date_str} успішно надіслано!")
 
 # --- КАТАЛОГ ---
 def show_catalog(u):
@@ -86,16 +113,43 @@ def show_catalog(u):
         st.error("Не вдалося завантажити дані таблиці.")
         return
 
-    # Фільтри
-    categories = ["Всі"] + sorted([str(c) for c in df['Категорія'].unique() if str(c).strip()])
+    # Формуємо список категорій, ховаємо сміття, додаємо Акції
+    all_cats = sorted([str(c) for c in df['Категорія'].unique() if str(c).strip()])
+    if "000 Мусор" in all_cats: 
+        all_cats.remove("000 Мусор")
+    
+    categories = ["🔥 АКЦІЙНІ ТОВАРИ", "Всі"] + all_cats
+    
     c1, c2 = st.columns([1, 2])
     with c1: sel_cat = st.selectbox("📁 Категорія:", categories)
     with c2: search = st.text_input("🔍 Пошук товару:")
 
+    # === БАНЕР ДЛЯ СВІЖОГО М'ЯСА ===
+    if sel_cat == "Свіже м'ясо":
+        st.warning(
+            "🥩 **УВАГА: Спеціальні умови замовлення на СВІЖЕ М'ЯСО!**\n\n"
+            "🚛 **Можливі дні постачання:** Вівторок, Середа, Четвер, П'ятниця, Субота.\n"
+            "⏳ **Передзамовлення:** Суворо за **2 дні** до бажаного дня постачання."
+        )
+        st.divider()
+
     f_df = df
-    if sel_cat != "Всі": f_df = f_df[f_df['Категорія'] == sel_cat]
+    
+    # ЛОГІКА АКЦІЙ ТА ФІЛЬТРАЦІЯ
+    if sel_cat == "🔥 АКЦІЙНІ ТОВАРИ":
+        f_df = f_df[f_df['Опис (укр)'].str.contains('АКЦІЯ|акція', case=False, na=False)]
+        if f_df.empty:
+            st.warning("Наразі акційних товарів немає. Заходьте пізніше!")
+            return
+    elif sel_cat != "Всі":
+        f_df = f_df[f_df['Категорія'] == sel_cat]
+
+    if sel_cat != "🔥 АКЦІЙНІ ТОВАРИ":
+        f_df = f_df[f_df['Категорія'] != "000 Мусор"]
+
     if search: f_df = f_df[f_df['Назва'].str.contains(search, case=False, na=False)]
 
+    # ВИВІД КАРТОК
     for idx, row in f_df.iterrows():
         with st.container():
             col_img, col_txt = st.columns([1, 2])
@@ -105,10 +159,16 @@ def show_catalog(u):
                 else: st.image("https://via.placeholder.com/300?text=Food+Festival", use_container_width=True)
             
             with col_txt:
-                st.subheader(row.get('Назва', 'Без назви'))
-                if row.get('Опис (укр)'): st.info(row['Опис (укр)'])
+                # ВОГНИК для акційних товарів
+                is_promo = 'акція' in str(row.get('Опис (укр)', '')).lower()
+                display_name = f"🔥 {row.get('Назва', 'Без назви')}" if is_promo else row.get('Назва', 'Без назви')
+                st.subheader(display_name)
                 
-                # БЕЗПЕЧНА ОБРОБКА ЦІНИ
+                # Чистимо опис від технічної мітки
+                if row.get('Опис (укр)'): 
+                    clean_desc = str(row['Опис (укр)']).replace('! АКЦІЯ', '').strip()
+                    if clean_desc: st.info(clean_desc)
+                
                 try:
                     price_str = str(row.get('Ціна', '0')).replace(',', '.').strip()
                     price = float(price_str) if price_str else 0.0
@@ -121,7 +181,7 @@ def show_catalog(u):
                 qty = st.number_input("Кількість", min_value=0.0, step=1.0, key=f"q_{art}_{idx}")
                 
                 if qty > 0:
-                    st.session_state.cart[row['Назва']] = {'qty': qty, 'price': price, 'art': art}
+                    st.session_state.cart[row['Назва']] = {'qty': qty, 'price': price, 'art': art, 'category': row.get('Категорія', '')}
         st.divider()
 
 # --- ВХІД ---
