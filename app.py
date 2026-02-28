@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, date
 # ==========================================
 OWNER_PHONE = "0675953220"
 LOGO_URL = "https://foodfestival.com.ua/image/catalog/logos/logo_foodfestival_upd-2.png"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyaFzeDCKyGghOoel888Xx_QkEaYTytH2te1BsJlSlUAqKYg1LyxF0_AwogvNPOU1PX/exec"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbydqJM4x7127JAMFU98FAIp3Cwown0QJgPix4iAtFVtXrTQzngWjNF3qkcWEUBi4OIq/exec"
 
 # URLs твоїх трьох вкладок (переконайся, що вони опубліковані як CSV)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vROj05yiP9BW6ddvZ36HcczmZYg-Cxg1IOoJKmwp1lYWoBZ7T3PK9i7JMOj9nyMi4mmQW-nRQxfHexx/pub?gid=0&single=true&output=csv"
