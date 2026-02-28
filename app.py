@@ -20,10 +20,14 @@ st.set_page_config(page_title="Food Festival", page_icon=LOGO_URL, layout="wide"
 
 @st.cache_data(ttl=30)
 def load_data(url):
-    try: return pd.read_csv(url, dtype=str).fillna('')
+    try: 
+        df = pd.read_csv(url, dtype=str).fillna('')
+        # Очищаємо назви колонок від зайвих пробілів
+        df.columns = df.columns.str.strip()
+        return df
     except: return None
 
-# --- ЛОГІКА КОШИКА (БЕЗ ОПИСІВ) ---
+# --- КОШИК (БЕЗ ОПИСІВ) ---
 def show_cart(u):
     st.title("🛒 Ваше замовлення")
     if not st.session_state.cart:
@@ -33,7 +37,6 @@ def show_cart(u):
     total = 0
     items_txt = ""
     
-    # Заголовок таблиці кошика
     col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
     col_h1.caption("Товар")
     col_h2.caption("К-сть")
@@ -46,7 +49,7 @@ def show_cart(u):
         
         c1, c2, c3 = st.columns([3, 1, 1])
         with c1:
-            st.write(f"**{name}**") # Тільки назва, без опису!
+            st.write(f"**{name}**")
             st.caption(f"{data['price']:g} ₴/од.")
         with c2:
             st.write(f"{data['qty']:g}")
@@ -59,73 +62,66 @@ def show_cart(u):
     st.divider()
     st.subheader(f"💰 Разом до сплати: {total:g} ₴")
     
-    addr = st.text_input("📍 Адреса доставки (місто, вулиця, будинок):")
+    addr = st.text_input("📍 Адреса доставки:")
     deliv = st.selectbox("🚚 Спосіб отримання:", ["Доставка Food Festival", "Самовивіз"])
     
     if st.button("🚀 ВІДПРАВИТИ ЗАМОВЛЕННЯ", use_container_width=True):
         if not addr and deliv != "Самовивіз":
-            st.error("Будь ласка, вкажіть адресу доставки!")
+            st.error("Вкажіть адресу!")
             return
-            
-        manager = str(u.get('Менеджер', 'Микола')).strip()
-        delivery_time = "СЬОГОДНІ" if datetime.now().hour < 11 else "ЗАВТРА"
         
-        msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n⏰ Доставка на {delivery_time}\n"
-               f"👤 {u['Назва']}\n📞 {u['Телефон']}\n💰 Сума: {total:g} ₴\n"
-               f"🚚 {deliv}: {addr}\n🛒 {items_txt}")
-        
-        # Надсилаємо в Telegram
+        msg = (f"🛍 <b>НОВЕ ЗАМОВЛЕННЯ!</b>\n👤 {u['Назва']}\n📞 {u['Телефон']}\n💰 Сума: {total:g} ₴\n🛒 {items_txt}")
         requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", 
                       data={"chat_id": GROUP_ID, "text": msg, "parse_mode": "HTML"})
         
-        # Надсилаємо в Google Таблицю
-        requests.post(SCRIPT_URL, json={
-            "type": "NEW_ORDER", "phone": u['Телефон'], "client": u['Назва'], 
-            "total": total, "items": items_txt, "address": addr
-        })
-        
         st.balloons()
-        st.success("✅ Замовлення успішно надіслано! Менеджер зв'яжеться з вами.")
         st.session_state.cart = {}
-        # st.rerun() # Можна розкоментувати для очищення екрану після замовлення
+        st.success("Замовлення надіслано!")
 
-# --- КАТАЛОГ (З ПРАВИЛЬНИМИ ФОТО ТА НАЗВАМИ) ---
+# --- КАТАЛОГ ---
 def show_catalog(u):
     st.title("🍎 Каталог Food Festival")
     df = load_data(SHEET_URL)
-    if df is None: return
+    if df is None: 
+        st.error("Не вдалося завантажити дані таблиці.")
+        return
 
     # Фільтри
-    cats = ["Всі"] + sorted(list(df['Категорія'].unique()))
+    categories = ["Всі"] + sorted([str(c) for c in df['Категорія'].unique() if str(c).strip()])
     c1, c2 = st.columns([1, 2])
-    with c1: sel_cat = st.selectbox("📁 Категорія:", cats)
+    with c1: sel_cat = st.selectbox("📁 Категорія:", categories)
     with c2: search = st.text_input("🔍 Пошук товару:")
 
     f_df = df
     if sel_cat != "Всі": f_df = f_df[f_df['Категорія'] == sel_cat]
-    if search: f_df = f_df[f_df['Назва'].str.contains(search, case=False)]
+    if search: f_df = f_df[f_df['Назва'].str.contains(search, case=False, na=False)]
 
     for idx, row in f_df.iterrows():
         with st.container():
             col_img, col_txt = st.columns([1, 2])
             with col_img:
                 img = str(row.get('Фото', '')).strip()
-                # Примусово перевіряємо посилання
                 if img.startswith('http'): st.image(img, use_container_width=True)
                 else: st.image("https://via.placeholder.com/300?text=Food+Festival", use_container_width=True)
             
             with col_txt:
-                st.subheader(row['Назва']) # Нова назва (перекладена ШІ)
-                if row.get('Опис (укр)'): st.info(row['Опис (укр)']) # Опис тільки тут
+                st.subheader(row.get('Назва', 'Без назви'))
+                if row.get('Опис (укр)'): st.info(row['Опис (укр)'])
                 
-                price = float(str(row.get('Ціна', '0')).replace(',', '.'))
+                # БЕЗПЕЧНА ОБРОБКА ЦІНИ
+                try:
+                    price_str = str(row.get('Ціна', '0')).replace(',', '.').strip()
+                    price = float(price_str) if price_str else 0.0
+                except ValueError:
+                    price = 0.0
+                
                 st.write(f"💰 Ціна: **{price:g} ₴**")
                 
-                # Унікальний ключ для кнопки
-                key = f"btn_{row['upc']}_{idx}"
-                qty = st.number_input("Кількість", min_value=0.0, step=1.0, key=key)
+                art = str(row.get('upc', 'no_art')).strip()
+                qty = st.number_input("Кількість", min_value=0.0, step=1.0, key=f"q_{art}_{idx}")
+                
                 if qty > 0:
-                    st.session_state.cart[row['Назва']] = {'qty': qty, 'price': price, 'art': row['upc']}
+                    st.session_state.cart[row['Назва']] = {'qty': qty, 'price': price, 'art': art}
         st.divider()
 
 # --- ВХІД ---
@@ -139,21 +135,20 @@ def main():
         if st.button("Увійти"):
             if ph == OWNER_PHONE:
                 st.session_state.logged_in = True
-                st.session_state.user_info = {'Назва': 'Микола (Власник)', 'Телефон': ph, 'Роль': 'Admin'}
+                st.session_state.user_info = {'Назва': 'Микола (Власник)', 'Телефон': ph}
                 st.rerun()
             df_c = load_data(CLIENTS_URL)
             if df_c is not None:
-                user = df_c[df_c['Телефон'] == ph]
+                user = df_c[df_c['Телефон'].str.strip() == ph.strip()]
                 if not user.empty:
                     st.session_state.logged_in = True
                     st.session_state.user_info = user.iloc[0].to_dict()
                     st.rerun()
                 else: st.error("Користувача не знайдено.")
     else:
-        u = st.session_state.user_info
         page = st.sidebar.radio("Меню", ["🍎 Каталог", "🛒 Кошик"])
-        if page == "🍎 Каталог": show_catalog(u)
-        else: show_cart(u)
+        if page == "🍎 Каталог": show_catalog(st.session_state.user_info)
+        else: show_cart(st.session_state.user_info)
         if st.sidebar.button("Вийти"):
             st.session_state.logged_in = False
             st.rerun()
