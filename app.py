@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 import pandas as pd
 import requests
 import json
@@ -17,12 +17,16 @@ st.set_page_config(page_title="Food Festival Замовлення", page_icon=CO
 
 @st.cache_data(ttl=60)
 def load_data(url):
-    try: return pd.read_csv(url, dtype=str).fillna('').apply(lambda x: x.str.strip())
-    except: return None
+    try: 
+        return pd.read_csv(url, dtype=str).fillna('').apply(lambda x: x.str.strip())
+    except: 
+        return None
 
 def safe_float(val):
-    try: return float(str(val).replace(',', '.').replace(' ', ''))
-    except: return 0.0
+    try: 
+        return float(str(val).replace(',', '.').replace(' ', ''))
+    except: 
+        return 0.0
 
 def main():
     if 'cart' not in st.session_state: st.session_state.cart = {}
@@ -42,12 +46,15 @@ def main():
                 if not user.empty:
                     st.session_state.logged_in, st.session_state.user = True, user.iloc[0].to_dict()
                     st.rerun()
-                else: st.error("Користувача не знайдено.")
+                else: 
+                    st.error("Користувача не знайдено.")
     else:
         st.sidebar.title(f"👋 {st.session_state.user['Назва']}")
         page = st.sidebar.radio("Меню", ["🍎 Каталог", "🛒 Кошик"])
-        if page == "🍎 Каталог": show_catalog()
-        else: show_cart()
+        if page == "🍎 Каталог": 
+            show_catalog()
+        else: 
+            show_cart()
         if st.sidebar.button("Вийти"):
             st.session_state.logged_in = False
             st.rerun()
@@ -69,13 +76,16 @@ def show_catalog():
         with st.container(border=True):
             col1, col2 = st.columns([1, 3])
             col1.image(r['Фото'] if 'http' in r['Фото'] else "https://via.placeholder.com/150")
-            price = safe_float(r['Ціна'])
+            
+            # --- ВИПРАВЛЕНИЙ РЯДОК ---
+            price = safe_float(r.get('Цена', 0))
+            
             col2.subheader(r['Назва'])
             col2.write(f"💵 **{price:g} ₴**")
             
-            q_key = f"q_{r['upc']}"
+            q_key = f"q_{r.get('upc', _)}" # Додано .get для upc на випадок відсутності
             qty = col2.number_input("Кількість", min_value=0.0, step=1.0, key=q_key)
-            if col2.button("Додати в кошик", key=f"btn_{r['upc']}"):
+            if col2.button("Додати в кошик", key=f"btn_{r.get('upc', _)}"):
                 if qty > 0:
                     st.session_state.cart[r['Назва']] = {'qty': qty, 'price': price}
                     st.toast(f"✅ Додано!")
@@ -120,3 +130,4 @@ def show_cart():
 
 if __name__ == "__main__":
     main()
+                          
