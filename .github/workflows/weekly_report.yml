@@ -25,4 +25,6 @@ jobs:
           pip install pandas requests
 
       - name: Run scheduler script
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
         run: python scheduler.py weekly
