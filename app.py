@@ -30,30 +30,35 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- ДОПОМІЖНІ ФУНКЦІЇ ---
+def clean_phone(phone):
+    """Залишає лише цифри в номері телефону"""
+    return re.sub(r'\D', '', str(phone))
+
 @st.cache_data(ttl=10)
 def load_data(url):
     try:
         response = requests.get(url)
         df = pd.read_csv(io.StringIO(response.text), dtype=str).fillna('')
-        # Очищуємо назви колонок від пробілів та зайвих символів
         df.columns = [c.strip() for c in df.columns]
         return df
     except Exception as e:
         st.error(f"Помилка завантаження: {e}")
         return None
 
+# ==========================================
+# 🍽️ КАТАЛОГ
+# ==========================================
 def show_catalog(u):
     st.title("🍽️ Меню Food Festival")
     df = load_data(CONFIG["CATALOG_URL"])
     if df is None or df.empty: return
 
-    # --- ЖОРСТКИЙ ТА РОЗУМНИЙ МАПІНГ КОЛОНОК ---
     cols_low = {c.lower().strip(): c for c in df.columns}
-    
     name_col = cols_low.get('назва') or df.columns[0]
     art_col = cols_low.get('upc') or cols_low.get('артикул') or df.columns[1]
     price_col = cols_low.get('цена') or cols_low.get('ціна') or df.columns[-1]
-    desc_col = cols_low.get('опис (укр)') or cols_low.get('опис') or 'Опис (укр)'
+    desc_col = cols_low.get('опис (укр)') or cols_low.get('опис') or 'Опис'
     photo_col = 'Фото'
 
     search = st.text_input("🔍 Пошук продукту...").lower()
@@ -67,22 +72,17 @@ def show_catalog(u):
         for j, item in enumerate(items[i:i+3]):
             with row_cols[j]:
                 st.markdown('<div class="product-card">', unsafe_allow_html=True)
-                
-                # Фото
                 raw_img = str(item.get(photo_col, ''))
                 img_url = re.findall(r'(https?://[^\s"\';)]+)', raw_img)
                 st.image(img_url[0] if img_url else "https://via.placeholder.com/300x200?text=Food+Festival", use_container_width=True)
                 
-                # Назва
                 st.subheader(item[name_col])
                 st.caption(f"Код: {item[art_col]}")
 
-                # Опис (УКР)
                 if desc_col in item and item[desc_col]:
                     with st.expander("📖 Про товар"):
                         st.write(item[desc_col])
                 
-                # Ціна
                 try:
                     p = float(str(item[price_col]).replace(',', '.'))
                     disc = float(str(u.get('Знижка', '0')).replace('%','')) / 100
@@ -91,15 +91,17 @@ def show_catalog(u):
                 
                 st.markdown(f"### {final_p:g} ₴")
                 
-                # Кнопка
                 item_id = str(item[art_col])
                 qty = st.number_input("Кількість", min_value=0.0, step=1.0, key=f"qty_{item_id}")
                 if st.button("🛒 В кошик", key=f"btn_{item_id}"):
                     if qty > 0:
                         st.session_state.cart[item[name_col]] = {'qty': qty, 'price': final_p, 'upc': item_id}
-                        st.toast(f"✅ {item[name_col]}")
+                        st.toast(f"✅ Додано!")
                 st.markdown('</div>', unsafe_allow_html=True)
 
+# ==========================================
+# 🛒 КОШИК
+# ==========================================
 def show_cart(u):
     st.title("🛒 Кошик")
     if not st.session_state.cart:
@@ -117,7 +119,7 @@ def show_cart(u):
     st.divider()
     if total >= CONFIG["MIN_ORDER"]:
         addr = st.text_input("📍 Адреса доставки", value=u.get('Адреса', ''))
-        if st.button("🚀 Надіслати замовлення", use_container_width=True):
+        if st.button("🚀 Надіслати", use_container_width=True):
             items_txt = "\n".join([f"- {n}: {d['qty']} шт." for n, d in st.session_state.cart.items()])
             msg = f"🛍 <b>ЗАМОВЛЕННЯ</b>\n👤 {u['Назва']}\n💰 {total:g} ₴\n📍 {addr}\n\n🛒 Товари:\n{items_txt}"
             requests.post(f"https://api.telegram.org/bot{CONFIG['TG_TOKEN']}/sendMessage", data={"chat_id": CONFIG["GROUP_ID"], "text": msg, "parse_mode": "HTML"})
@@ -125,27 +127,45 @@ def show_cart(u):
             st.success("Відправлено!")
             st.balloons()
     else:
-        st.error(f"⚠️ Мінімалка 1000 ₴. Треба ще {CONFIG['MIN_ORDER'] - total:g} ₴")
+        st.error(f"⚠️ До мінімалки 1000 ₴ треба ще {CONFIG['MIN_ORDER'] - total:g} ₴")
 
+# ==========================================
+# 📊 ЛОГІН ТА ГОЛОВНА
+# ==========================================
 def main():
     if 'cart' not in st.session_state: st.session_state.cart = {}
     if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 
     if not st.session_state.logged_in:
         st.title("Вхід Food Festival")
-        phone_input = st.text_input("Введіть телефон:")
+        phone_input = st.text_input("Введіть ваш номер телефону (напр. 067...):")
+        
         if st.button("🚪 Увійти"):
             df_c = load_data(CONFIG["CLIENTS_URL"])
             if df_c is not None:
-                # --- РОЗУМНИЙ ПОШУК КОЛОНКИ ТЕЛЕФОН ---
+                # Шукаємо колонку телефон
                 c_map = {c.lower().strip(): c for c in df_c.columns}
-                phone_col = c_map.get('телефон') or df_c.columns[1] # Якщо не знайшли, беремо другу колонку
+                phone_col = c_map.get('телефон') or c_map.get('тел') or df_c.columns[1]
                 
-                user = df_c[df_c[phone_col].str.strip() == phone_input.strip()]
-                if not user.empty:
-                    st.session_state.logged_in, st.session_state.user_info = True, user.iloc[0].to_dict()
+                # Нормалізуємо вхідний номер
+                input_clean = clean_phone(phone_input)
+                
+                # Пошук
+                user_match = None
+                for idx, row in df_c.iterrows():
+                    if clean_phone(row[phone_col]) == input_clean:
+                        user_match = row.to_dict()
+                        break
+                
+                if user_match:
+                    st.session_state.logged_in, st.session_state.user_info = True, user_match
                     st.rerun()
-                else: st.error("Користувача не знайдено.")
+                else:
+                    st.error("❌ Користувача не знайдено.")
+                    with st.expander("🛠 Діагностика для Миколи"):
+                        st.write("Що бачить додаток у таблиці Клієнти:")
+                        st.write(f"Колонки: {list(df_c.columns)}")
+                        st.write(f"Перші 3 номери в базі: {df_c[phone_col].head(3).tolist()}")
     else:
         u = st.session_state.user_info
         page = st.sidebar.radio("Меню", ["Каталог", "Кошик"])
