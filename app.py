@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import io
 import re
+from datetime import datetime, timedelta, date
 
 # ==========================================
 # 🔑 КОНФІГУРАЦІЯ
@@ -120,7 +121,6 @@ def show_cart(u):
 
     total = sum(d['qty'] * d['price'] for d in st.session_state.cart.values())
     
-    # Формуємо красивий список для екрану
     for name, d in list(st.session_state.cart.items()):
         c1, c2, c3 = st.columns([3, 1, 0.5])
         c1.write(f"**{name}**")
@@ -135,7 +135,6 @@ def show_cart(u):
         addr = st.text_input("📍 Адреса доставки", value=u.get('Адреса', ''))
         if st.button("🚀 ПІДТВЕРДИТИ ЗАМОВЛЕННЯ", use_container_width=True):
             
-            # ФОРМУЄМО ДЕТАЛЬНИЙ ТЕКСТ ДЛЯ ТЕЛЕГРАМ
             items_list = ""
             for name, data in st.session_state.cart.items():
                 items_list += f"🔸 {name} — {data['qty']} шт. (по {data['price']:g} ₴)\n"
@@ -196,12 +195,29 @@ def main():
         elif choice == "🛒 Кошик": show_cart(u)
         elif choice == "📈 Аналітика": show_analytics()
         elif choice == "📜 Історія":
+            st.title("📜 Ваша історія замовлень")
             df = load_data(CONFIG["ORDERS_URL"])
-            if df is not None:
-                my = df[df['Назва'] == u.get('Назва', '')]
-                for _, r in my.iloc[::-1].iterrows():
-                    with st.expander(f"📦 {r.get('Дата', '')} | {r.get('Сума', '')} ₴"):
-                        st.write(r.get('Товари', ''))
+            if df is not None and not df.empty:
+                c_map = {c.lower().strip(): c for c in df.columns}
+                phone_col = c_map.get('телефон') or c_map.get('тел')
+                
+                # Шукаємо замовлення саме цього клієнта за телефоном
+                if phone_col:
+                    my = df[df[phone_col].apply(lambda x: re.sub(r'\D', '', str(x))) == re.sub(r'\D', '', str(u.get('Телефон', '')))]
+                else:
+                    client_col = c_map.get('клієнт') or c_map.get('клиент') or df.columns[1]
+                    my = df[df[client_col] == u.get('Назва', '')]
+                
+                if my.empty:
+                    st.info("У вас ще немає замовлень у базі.")
+                else:
+                    date_col = c_map.get('дата') or df.columns[0]
+                    sum_col = c_map.get('сума') or c_map.get('сумма') or 'Сума'
+                    items_col = c_map.get('товари') or c_map.get('товары') or 'Товари'
+                    
+                    for _, r in my.iloc[::-1].iterrows():
+                        with st.expander(f"📦 Замовлення: {r.get(date_col, 'Без дати')} | {r.get(sum_col, '0')} ₴"):
+                            st.write(r.get(items_col, 'Немає деталей'))
 
 if __name__ == "__main__":
     main()
