@@ -1,29 +1,37 @@
-name: Scheduled Business Reports
+name: Order Reminder for Clients
 
 on:
+  # 1. Запуск за розкладом (Cron)
   schedule:
-    # 13:00 UTC = 15:00 за Києвом (Щодня)
-    - cron: '0 13 * * *'
-    # 14:00 UTC = 16:00 за Києвом (Щоп'ятниці)
-    - cron: '0 14 * * 5'
+    # 15:00 UTC = 17:00 за Києвом (взимку)
+    - cron: '0 15 * * *'
+    # 19:00 UTC = 21:00 за Києвом
+    - cron: '0 19 * * *'
+
+  # 2. Дозволяє запускати скрипт ВРУЧНУ (з вкладки Actions)
   workflow_dispatch:
 
+  # 3. Запускати при кожному оновленні коду (для тестів)
+  push:
+    branches:
+      - main
+
 jobs:
-  reports:
+  send-reminders:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-      - run: pip install requests pandas
-      
-      # Запуск щоденного звіту о 15:00
-      - name: Daily Manager Reports
-        if: github.event.schedule == '0 13 * * *' || github.event_name == 'workflow_dispatch'
-        run: python scheduler.py daily
-        
-      # Запуск тижневого звіту о 16:00 у п'ятницю
-      - name: Weekly Director Report
-        if: github.event.schedule == '0 14 * * 5'
-        run: python scheduler.py weekly
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install pandas requests
+
+      - name: Run reminder script
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        run: python scheduler.py
