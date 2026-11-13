@@ -63,11 +63,8 @@ st.markdown("""
 
 # --- ГОЛОВНІ НАЛАШТУВАННЯ ---
 TELEGRAM_BOT_TOKEN = "9287222887:AAGxr1QuoO0NZ6yqP2WDVheUaGpXXFkjfEk"
-# УВАГА: Замініть ці цифри на свій особистий Chat ID (знайдіть його кнопкою в сайдбарі!)
-TELEGRAM_CHAT_ID = "9287222887"
-
-# Вставте сюди URL веб-додатка з Google Apps Script (закінчується на /exec)
-GOOGLE_SCRIPT_WEBHOOK_URL = ""
+TELEGRAM_CHAT_ID = "9094138938"
+GOOGLE_SCRIPT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyomqYX_XTsf-drLG8f0VY8YMqdSUP-Oti51rrMQ7X9D7DjTZ1IR2TgwknpDPXaQpqb/exec"
 
 SUPPORT_PHONE = "097 777 70 60"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1OM0qaqgBryi0OVfBpnYWiQk3Jw3fIV_4L3RqKhK9R9k/export?format=csv&gid=1813155293"
@@ -93,8 +90,8 @@ def send_telegram_order(phone, segment, cart_items, total):
 
 # --- ФУНКЦІЯ ЗАПИСУ В GOOGLE ТАБЛИЦЮ ---
 def send_order_to_sheet(phone, segment, cart_items, total):
-    if not GOOGLE_SCRIPT_WEBHOOK_URL or not GOOGLE_SCRIPT_WEBHOOK_URL.startswith("http"):
-        return False, "Не вказано посилання GOOGLE_SCRIPT_WEBHOOK_URL у коді"
+    if not GOOGLE_SCRIPT_WEBHOOK_URL:
+        return False, "Не вказано посилання вебхука"
         
     items_list = []
     for item, details in cart_items.items():
@@ -221,7 +218,6 @@ try:
                         
             st.markdown(f"### Загалом: {total_sum:.2f} грн")
             
-            # Важлива зміна: після натискання ми НЕ робимо миттєвий st.rerun(), щоб ви бачили статус відправки
             if st.button("✅ Оформити замовлення", use_container_width=True, type="primary"):
                 tg_ok, tg_msg = send_telegram_order(st.session_state.user['phone'], st.session_state.user['segment'], st.session_state.cart, total_sum)
                 sh_ok, sh_msg = send_order_to_sheet(st.session_state.user['phone'], st.session_state.user['segment'], st.session_state.cart, total_sum)
@@ -233,30 +229,12 @@ try:
                     
                 if sh_ok:
                     st.success("✅ Замовлення записано в Google Таблицю!")
-                elif GOOGLE_SCRIPT_WEBHOOK_URL:
+                else:
                     st.error(f"❌ Помилка запису в Таблицю: {sh_msg}")
                 
                 if tg_ok or sh_ok:
                     st.session_state.cart = {}
                     st.balloons()
-
-        # ДОПОМІЖНИЙ ІНСТРУМЕНТ ДЛЯ ПЕРЕВІРКИ TELEGRAM
-        st.markdown("---")
-        with st.expander("⚙️ Налаштування Telegram ID"):
-            st.caption("Напишіть боту в Telegram слово 'Привіт' і натисніть кнопку нижче:")
-            if st.button("🔍 Знайти мій Chat ID"):
-                try:
-                    r = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates", timeout=10).json()
-                    results = r.get("result", [])
-                    if results:
-                        last_msg = results[-1].get("message", results[-1].get("my_chat_member", {}))
-                        found_id = last_msg.get("chat", {}).get("id")
-                        first_name = last_msg.get("chat", {}).get("first_name", "")
-                        st.success(f"Ваш справжній ID: `{found_id}` ({first_name}). Вставте його у рядок 65 коду!")
-                    else:
-                        st.warning("Повідомлень не знайдено. Зайдіть у бот і напишіть йому будь-яке повідомлення.")
-                except Exception as ex:
-                    st.error(f"Помилка: {ex}")
 
     # --- ФІЛЬТРАЦІЯ ТА ПОШУК ---
     if search_query.strip():
@@ -283,7 +261,7 @@ try:
     total_items = len(catalog_df)
     
     if total_items == 0:
-        st.warning("Товарів за вашим запитом не знайдено. Спробуйте змінити критерії пошуку або вибрати 'Усі категорії'.")
+        st.warning("Товарів за вашим запитом не знайдено.")
     else:
         total_pages = max(1, (total_items - 1) // ITEMS_PER_PAGE + 1)
         if st.session_state.current_page > total_pages:
@@ -309,54 +287,3 @@ try:
                     img_url = row.get("Фото URL", "")
                     if img_url and str(img_url).startswith("http"):
                         st.markdown(f'<div class="product-img-box"><img src="{img_url}"></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="product-img-box" style="color: #ccc;">Немає фото</div>', unsafe_allow_html=True)
-                        
-                    marker = str(row.get("Маркер вітрини", "")).strip()
-                    if marker and marker.lower() != "nan":
-                        st.markdown(f'<div style="height: 22px; margin-bottom: 4px;"><span style="background-color:#ff4b4b;color:white;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:bold;display:inline-block;">{marker}</span></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div style="height: 22px; margin-bottom: 4px;"></div>', unsafe_allow_html=True)
-                    
-                    st.markdown(f'<div class="product-title" title="{item_name}">{item_name}</div>', unsafe_allow_html=True)
-                    
-                    sku_part = f"<span>Код: {art}</span>" if art else "<span>&nbsp;</span>"
-                    stock_part = f'<span class="stock-badge">Склад: {stock_str}</span>'
-                    st.markdown(f'<div class="product-meta">{sku_part}{stock_part}</div>', unsafe_allow_html=True)
-                    
-                    st.write(f"**Ціна:** {price:.2f} грн")
-                    
-                    q_col1, q_col2 = st.columns([1, 1.3])
-                    with q_col1:
-                        add_qty = st.number_input("К-сть", min_value=1, max_value=100, value=1, key=f"add_{index}", label_visibility="collapsed")
-                    with q_col2:
-                        if st.button("В кошик", key=f"btn_{index}", use_container_width=True):
-                            if price > 0:
-                                if item_name in st.session_state.cart:
-                                    st.session_state.cart[item_name]['кількість'] += add_qty
-                                else:
-                                    st.session_state.cart[item_name] = {'ціна': price, 'кількість': add_qty, 'арт': art}
-                                st.toast(f"✅ {item_name} додано!")
-                                st.rerun()
-                            else:
-                                st.error("Немає ціни")
-
-        if total_pages > 1:
-            st.markdown("---")
-            pag_col1, pag_col2, pag_col3 = st.columns([1, 2, 1])
-            with pag_col1:
-                if st.session_state.current_page > 1:
-                    if st.button("⬅️ Попередня", use_container_width=True):
-                        st.session_state.current_page -= 1
-                        st.rerun()
-            with pag_col2:
-                st.markdown(f"<div style='text-align: center; padding-top: 5px;'><b>Сторінка {st.session_state.current_page} з {total_pages}</b></div>", unsafe_allow_html=True)
-            with pag_col3:
-                if st.session_state.current_page < total_pages:
-                    if st.button("Наступна ➡️", use_container_width=True):
-                        st.session_state.current_page += 1
-                        st.rerun()
-
-except Exception as e:
-    st.error(f"Помилка завантаження даних: {e}")
-# --- КІНЕЦЬ ФАЙЛУ ---
