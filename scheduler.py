@@ -68,7 +68,7 @@ GOOGLE_SCRIPT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyomqYX_XTs
 
 SUPPORT_PHONE = "097 777 70 60"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1OM0qaqgBryi0OVfBpnYWiQk3Jw3fIV_4L3RqKhK9R9k/export?format=csv&gid=1813155293"
-MIN_ORDER_SUM = 1000.0  # Мінімальна сума замовлення в гривнях
+MIN_ORDER_SUM = 1000.0
 
 # --- ФУНКЦІЯ ВІДПРАВКИ В TELEGRAM ---
 def send_telegram_order(phone, segment, cart_items, total):
@@ -219,7 +219,6 @@ try:
                         
             st.markdown(f"### Загалом: {total_sum:.2f} грн")
             
-            # ПЕРЕВІРКА МІНІМАЛЬНОГО ЛІМІТУ ЗАМОВЛЕННЯ (1000 грн)
             if total_sum < MIN_ORDER_SUM:
                 diff = MIN_ORDER_SUM - total_sum
                 st.warning(f"⚠️ Мінімальна сума замовлення: **{MIN_ORDER_SUM:.0f} грн**.\nДодайте товарів ще на **{diff:.2f} грн**.")
