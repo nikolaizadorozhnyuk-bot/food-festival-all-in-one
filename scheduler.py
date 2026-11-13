@@ -64,7 +64,7 @@ st.markdown("""
 # --- ГОЛОВНІ НАЛАШТУВАННЯ ---
 TELEGRAM_BOT_TOKEN = "9287222887:AAGxr1QuoO0NZ6yqP2WDVheUaGpXXFkjfEk"
 TELEGRAM_CHAT_ID = "9094138938"
-GOOGLE_SCRIPT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyomqYX_XTsf-drLG8f0VY8YMqdSUP-Oti51rrMQ7X9D7DjTZ1IR2TgwknpDPXaQpqb/exec"
+GOOGLE_SCRIPT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxSF1vIvNOCZ2g0gsF3KkBVeyMfBGgDJ4YeM9CdHNW4zNQ8i3XNxiyxGy5Pi12BIyA/exec"
 
 SUPPORT_PHONE = "097 777 70 60"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1OM0qaqgBryi0OVfBpnYWiQk3Jw3fIV_4L3RqKhK9R9k/export?format=csv&gid=1813155293"
